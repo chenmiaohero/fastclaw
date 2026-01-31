@@ -1,0 +1,177 @@
+### Clawork API Test
+### Base URL
+@baseUrl = http://localhost:18080
+@apiUrl = {{baseUrl}}/bot/api/v1
+
+### Variables
+@userId = user-001
+### 手动设置 botId（创建 bot 后替换为实际 ID）
+@botId = 99c116e1-2412-4ed9-8c3f-28e5a1c84357
+@skillName = my-skill
+
+### ============================================
+### Health Check
+### ============================================
+
+### Health check
+GET {{baseUrl}}/health
+
+### ============================================
+### Bot CRUD Operations
+### ============================================
+
+### Create a new bot
+# @name createBot
+POST {{apiUrl}}/bots
+Content-Type: application/json
+
+{
+    "user_id": "{{userId}}",
+    "name": "my-test-bot",
+    "config": {
+        "model": "claude-sonnet-4-20250514",
+        "api_key": "sk-xxx",
+        "agents_md": "# Agent Config\nYou are a helpful assistant.",
+        "soul_md": "# Soul Config\nBe friendly and professional.",
+        "mcp_servers": [
+            {
+                "name": "filesystem",
+                "command": "npx",
+                "args": ["-y", "@anthropic/mcp-server-filesystem"],
+                "env": {}
+            }
+        ]
+    }
+}
+
+### Create a simple bot (minimal config)
+# @name createSimpleBot
+POST {{apiUrl}}/bots
+Content-Type: application/json
+
+{
+    "user_id": "{{userId}}",
+    "name": "simple-bot"
+}
+
+### Create a bot with MiniMax config
+# @name createMiniMaxBot
+POST {{apiUrl}}/bots
+Content-Type: application/json
+
+{
+    "user_id": "{{userId}}",
+    "name": "minimax-bot-2",
+    "config": {
+        "model": "MiniMax-M2.1",
+        "api_key": "sk-api-fJKnAxz555gbzEHGyofGWSzjxDL1hytNmk7WC4vjQDZWE9PU_rXBg4BXQ0Xziu2HtgKJS6rEln7Q2786AhHEvq0wB031rCCzBy8_aaPHoZE-loo",
+        "base_url": "https://api.minimaxi.com/anthropic"
+    }
+}
+
+### List bots by user ID
+GET {{apiUrl}}/bots?user_id={{userId}}
+
+### Get a specific bot by ID
+GET {{apiUrl}}/bots/{{botId}}
+
+### Update a bot
+PUT {{apiUrl}}/bots/{{botId}}
+Content-Type: application/json
+
+{
+    "name": "minimax-bot-2",
+    "config": {
+        "model": "MiniMax-M2.1",
+        "api_key": "sk-api-fJKnAxz555gbzEHGyofGWSzjxDL1hytNmk7WC4vjQDZWE9PU_rXBg4BXQ0Xziu2HtgKJS6rEln7Q2786AhHEvq0wB031rCCzBy8_aaPHoZE-loo",
+        "base_url": "https://api.minimaxi.com/anthropic"
+    }
+}
+
+### Delete a bot
+DELETE {{apiUrl}}/bots/{{botId}}
+
+### ============================================
+### Bot Lifecycle Operations
+### ============================================
+
+### Start a bot
+POST {{apiUrl}}/bots/{{botId}}/start
+
+### Get bot status
+GET {{apiUrl}}/bots/{{botId}}/status
+
+### Get bot connection info
+GET {{apiUrl}}/bots/{{botId}}/connect
+
+### Stop a bot
+POST {{apiUrl}}/bots/{{botId}}/stop
+
+### Restart a bot
+POST {{apiUrl}}/bots/{{botId}}/restart
+
+### ============================================
+### Skills Management
+### ============================================
+
+### List skills for a bot
+GET {{apiUrl}}/bots/{{botId}}/skills
+
+### Update/Create a skill
+PUT {{apiUrl}}/bots/{{botId}}/skills/{{skillName}}
+Content-Type: application/json
+
+{
+    "content": "# My Custom Skill\n\nThis skill helps with specific tasks.\n\n## Usage\n\nUse this skill when the user asks about...\n\n## Instructions\n\n1. Do this\n2. Do that"
+}
+
+### Delete a skill
+DELETE {{apiUrl}}/bots/{{botId}}/skills/{{skillName}}
+
+### ============================================
+### Bot WebChat Access (via proxy)
+### ============================================
+
+### Access bot webchat page (replace with actual bot id)
+### After bot is started, visit this URL in browser:
+### http://localhost:18080/proxy/{bot-id}/
+### Or with subdomain (requires hosts/DNS config):
+### http://{bot-id}.workany.loc:18080/
+
+### Test proxy endpoint (health check of openclaw)
+GET {{baseUrl}}/proxy/{{botId}}/
+
+### ============================================
+### Test Scenarios
+### ============================================
+
+### Scenario 1: Full bot lifecycle test
+### Step 1: Create bot
+# @name scenarioBot
+POST {{apiUrl}}/bots
+Content-Type: application/json
+
+{
+    "user_id": "scenario-user",
+    "name": "lifecycle-test-bot"
+}
+
+### Step 2: Start the bot (use ID from step 1)
+POST {{apiUrl}}/bots/{{scenarioBot.response.body.data.id}}/start
+
+### Step 3: Check status
+GET {{apiUrl}}/bots/{{scenarioBot.response.body.data.id}}/status
+
+### Step 4: Add a skill
+PUT {{apiUrl}}/bots/{{scenarioBot.response.body.data.id}}/skills/greeting
+Content-Type: application/json
+
+{
+    "content": "# Greeting Skill\n\nRespond to greetings warmly."
+}
+
+### Step 5: Stop the bot
+POST {{apiUrl}}/bots/{{scenarioBot.response.body.data.id}}/stop
+
+### Step 6: Delete the bot
+DELETE {{apiUrl}}/bots/{{scenarioBot.response.body.data.id}}

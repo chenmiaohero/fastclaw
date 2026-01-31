@@ -1,0 +1,13 @@
+# Caddy configuration for workany local development
+
+# workany.loc - API (HTTPS with self-signed cert)
+workany.loc {
+    tls internal
+    reverse_proxy localhost:18080
+}
+
+# *.workany.loc - Bot WebChat (HTTPS with self-signed cert)
+*.workany.loc {
+    tls internal
+    reverse_proxy localhost:18080
+}

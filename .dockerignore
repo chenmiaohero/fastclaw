@@ -1,0 +1,58 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+README.md
+LICENSE
+docs/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Config files with secrets
+config.toml
+*.local.toml
+
+# Logs
+*.log
+logs/
+server.log
+
+# Debug
+debug/
+
+# Test files
+*_test.go
+*.test
+
+# Build artifacts
+dist/
+build/
+bin/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Environment files
+.env
+.env.*
+
+# Kubernetes configs
+kubeconfig
+*.kubeconfig
+Caddyfile
+
+# Go
+vendor/
+go.work
+go.work.sum

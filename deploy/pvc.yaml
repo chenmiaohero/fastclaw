@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: openclaw-shared-data
+  namespace: workany
+  labels:
+    app: clawork
+spec:
+  accessModes:
+    - ReadWriteMany  # 多 Pod 共享需要 RWX 模式
+  resources:
+    requests:
+      storage: 100Gi
+  # 根据你的云厂商选择 StorageClass
+  # 阿里云: alicloud-nas
+  # AWS: efs-sc
+  # GCP: filestore
+  # 自建: nfs-client
+  # storageClassName: your-storage-class

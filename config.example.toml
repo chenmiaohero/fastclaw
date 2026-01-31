@@ -1,0 +1,33 @@
+[server]
+port = 8080
+
+[db]
+host = "localhost"
+port = 5432
+user = "postgres"
+password = "postgres"
+database = "clawork"
+sslmode = "disable"
+timezone = "Asia/Shanghai"
+
+[kubernetes]
+# 留空使用 in-cluster config 或 ~/.kube/config
+kubeconfig = ""
+namespace = "openclaw"
+
+[storage]
+# 共享 PVC 名称
+pvc_name = "openclaw-shared-data"
+# NAS 挂载的基础路径 (Pod 内)
+base_path = "/openclaw-data"
+
+[openclaw]
+# 默认镜像
+image = "openclaw/openclaw:latest"
+# Gateway 端口
+gateway_port = 18789
+# 默认资源限制
+cpu_limit = "500m"
+memory_limit = "512Mi"
+cpu_request = "100m"
+memory_request = "128Mi"

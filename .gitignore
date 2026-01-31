@@ -1,0 +1,65 @@
+# Binaries
+clawork
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Go workspace file
+go.work
+go.work.sum
+
+# Dependency directories
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Config files with secrets
+config.toml
+*.local.toml
+
+# Logs
+*.log
+logs/
+
+# Debug
+debug/*.log
+
+# Database
+*.db
+*.sqlite
+
+# Kubernetes
+kubeconfig
+*.kubeconfig
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Build
+dist/
+build/
+bin/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
