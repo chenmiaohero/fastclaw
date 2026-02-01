@@ -90,3 +90,6 @@ Caddyfile
 # Coverage
 coverage/
 *.coverprofile
+
+deploy*
+debug*
