@@ -8,6 +8,7 @@ Clawork is a Kubernetes-native platform for managing and orchestrating OpenClaw 
 - **Kubernetes Native**: Deploys each bot as an isolated Pod with its own Service
 - **Multi-tenant Support**: Manage multiple bots per user with namespace isolation
 - **Skills Management**: Dynamically add, update, and delete skills for running bots
+- **WebSocket Proxy**: Real-time communication with bot instances
 - **Shared Storage**: NAS-backed persistent storage for bot data
 - **RESTful API**: Clean API design with Echo framework
 
@@ -33,7 +34,7 @@ Clawork is a Kubernetes-native platform for managing and orchestrating OpenClaw 
 - PostgreSQL 14+
 - Shared storage (NFS/NAS) for PVC
 
-## Installation
+## Quick Start
 
 ### Build from source
 
@@ -63,8 +64,6 @@ port = 5432
 user = "aigc"
 password = "your-password"
 database = "clawork"
-sslmode = "disable"
-timezone = "Asia/Shanghai"
 
 [kubernetes]
 kubeconfig = ""  # Empty for in-cluster config
@@ -79,8 +78,6 @@ image = "1panel/openclaw:latest"
 gateway_port = 18789
 cpu_limit = "500m"
 memory_limit = "512Mi"
-cpu_request = "100m"
-memory_request = "128Mi"
 ```
 
 ### Run
@@ -99,35 +96,43 @@ GET /health
 
 ### Bot Management
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/v1/bots` | Create a new bot |
-| GET | `/api/v1/bots?user_id=xxx` | List bots by user |
-| GET | `/api/v1/bots/:id` | Get bot details |
-| PUT | `/api/v1/bots/:id` | Update bot |
-| DELETE | `/api/v1/bots/:id` | Delete bot |
+| Method | Endpoint                   | Description       |
+| ------ | -------------------------- | ----------------- |
+| POST   | `/api/v1/bots`             | Create a new bot  |
+| GET    | `/api/v1/bots?user_id=xxx` | List bots by user |
+| GET    | `/api/v1/bots/:id`         | Get bot details   |
+| PUT    | `/api/v1/bots/:id`         | Update bot        |
+| DELETE | `/api/v1/bots/:id`         | Delete bot        |
 
 ### Bot Lifecycle
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/v1/bots/:id/start` | Start bot |
-| POST | `/api/v1/bots/:id/stop` | Stop bot |
-| POST | `/api/v1/bots/:id/restart` | Restart bot |
-| GET | `/api/v1/bots/:id/status` | Get bot status |
-| GET | `/api/v1/bots/:id/connect` | Get connection info |
+| Method | Endpoint                   | Description         |
+| ------ | -------------------------- | ------------------- |
+| POST   | `/api/v1/bots/:id/start`   | Start bot           |
+| POST   | `/api/v1/bots/:id/stop`    | Stop bot            |
+| POST   | `/api/v1/bots/:id/restart` | Restart bot         |
+| GET    | `/api/v1/bots/:id/status`  | Get bot status      |
+| GET    | `/api/v1/bots/:id/connect` | Get connection info |
 
 ### Skills Management
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/v1/bots/:id/skills` | List skills |
-| PUT | `/api/v1/bots/:id/skills/:name` | Update/create skill |
-| DELETE | `/api/v1/bots/:id/skills/:name` | Delete skill |
+| Method | Endpoint                        | Description         |
+| ------ | ------------------------------- | ------------------- |
+| GET    | `/api/v1/bots/:id/skills`       | List skills         |
+| PUT    | `/api/v1/bots/:id/skills/:name` | Update/create skill |
+| DELETE | `/api/v1/bots/:id/skills/:name` | Delete skill        |
 
-### Example: Create a Bot
+### Proxy
+
+| Method | Endpoint           | Description           |
+| ------ | ------------------ | --------------------- |
+| ANY    | `/proxy/:bot_id/*` | Proxy requests to bot |
+| WS     | `/proxy/:bot_id/*` | WebSocket proxy       |
+
+### Example: Create and Start a Bot
 
 ```bash
+# Create a bot
 curl -X POST http://localhost:8080/api/v1/bots \
   -H "Content-Type: application/json" \
   -d '{
@@ -138,31 +143,57 @@ curl -X POST http://localhost:8080/api/v1/bots \
       "api_key": "sk-xxx"
     }
   }'
+
+# Start the bot
+curl -X POST http://localhost:8080/api/v1/bots/{bot_id}/start
+
+# Get bot status
+curl http://localhost:8080/api/v1/bots/{bot_id}/status
 ```
 
-## Development
-
-### Project Structure
+## Project Structure
 
 ```
 clawork/
-├── cmd/            # CLI commands
-├── handler/        # HTTP handlers
-│   └── api/v1/     # API v1 handlers
-├── model/          # Data models
-├── service/        # Business logic
-│   └── k8s/        # Kubernetes operations
-├── util/           # Utilities
-├── debug/          # Debug & test files
-├── config.toml     # Configuration
-└── main.go         # Entry point
+├── cmd/                    # CLI commands
+│   ├── root.go            # Root command
+│   └── server.go          # Server command
+├── handler/               # HTTP handlers
+│   ├── api/v1/           # API v1 handlers
+│   │   ├── bot_*.go      # Bot endpoints
+│   │   └── skill_*.go    # Skill endpoints
+│   └── proxy/            # Proxy handlers
+│       └── proxy.go      # WebSocket/HTTP proxy
+├── model/                 # Data models
+│   └── bot.go            # Bot model
+├── service/              # Business logic
+│   └── k8s/              # Kubernetes service
+│       ├── client.go     # K8s client init
+│       ├── deployment.go # Deployment management
+│       ├── service.go    # Service management
+│       ├── exec.go       # Pod exec
+│       ├── botconfig.go  # Bot config writing
+│       ├── approve.go    # Device auto-approve
+│       └── channel.go    # WebSocket channel
+├── util/                 # Utilities
+│   ├── config.go        # Config management
+│   ├── db.go            # Database connection
+│   └── response.go      # HTTP response helper
+├── deploy/              # Deployment files
+├── config.toml          # Configuration
+└── main.go              # Entry point
 ```
 
-### Running Tests
+## Deployment
+
+See [deploy/](deploy/) directory for Kubernetes deployment examples.
 
 ```bash
-# Use REST Client in VSCode
-# Open debug/apitest.http
+# Build Docker image
+./deploy/build.sh
+
+# Deploy to Kubernetes
+./deploy/deploy.sh
 ```
 
 ## License

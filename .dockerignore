@@ -1,11 +1,13 @@
 # Git
 .git
 .gitignore
+.github
 
 # Documentation
 README.md
 LICENSE
 docs/
+*.md
 
 # IDE
 .idea/
@@ -20,11 +22,11 @@ Thumbs.db
 # Config files with secrets
 config.toml
 *.local.toml
+*.local.yaml
 
 # Logs
 *.log
 logs/
-server.log
 
 # Debug
 debug/
@@ -33,7 +35,8 @@ debug/
 *_test.go
 *.test
 
-# Build artifacts
+# Build artifacts (we build fresh in Docker)
+clawork
 dist/
 build/
 bin/
@@ -47,12 +50,29 @@ temp/
 .env
 .env.*
 
-# Kubernetes configs
+# Kubernetes configs (not needed in image)
 kubeconfig
 *.kubeconfig
-Caddyfile
+deploy/
 
 # Go
 vendor/
 go.work
 go.work.sum
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+data/
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# Local development
+Caddyfile
+*.pem
+*.key
+*.crt

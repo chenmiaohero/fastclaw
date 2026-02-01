@@ -6,7 +6,7 @@
 ### Variables
 @userId = user-001
 ### 手动设置 botId（创建 bot 后替换为实际 ID）
-@botId = 99c116e1-2412-4ed9-8c3f-28e5a1c84357
+@botId = your-bot-id-here
 @skillName = my-skill
 
 ### ============================================
@@ -30,7 +30,7 @@ Content-Type: application/json
     "name": "my-test-bot",
     "config": {
         "model": "claude-sonnet-4-20250514",
-        "api_key": "sk-xxx",
+        "api_key": "your-api-key-here",
         "agents_md": "# Agent Config\nYou are a helpful assistant.",
         "soul_md": "# Soul Config\nBe friendly and professional.",
         "mcp_servers": [
@@ -61,10 +61,10 @@ Content-Type: application/json
 
 {
     "user_id": "{{userId}}",
-    "name": "minimax-bot-2",
+    "name": "minimax-bot",
     "config": {
         "model": "MiniMax-M2.1",
-        "api_key": "sk-api-fJKnAxz555gbzEHGyofGWSzjxDL1hytNmk7WC4vjQDZWE9PU_rXBg4BXQ0Xziu2HtgKJS6rEln7Q2786AhHEvq0wB031rCCzBy8_aaPHoZE-loo",
+        "api_key": "your-minimax-api-key-here",
         "base_url": "https://api.minimaxi.com/anthropic"
     }
 }
@@ -80,10 +80,10 @@ PUT {{apiUrl}}/bots/{{botId}}
 Content-Type: application/json
 
 {
-    "name": "minimax-bot-2",
+    "name": "updated-bot-name",
     "config": {
         "model": "MiniMax-M2.1",
-        "api_key": "sk-api-fJKnAxz555gbzEHGyofGWSzjxDL1hytNmk7WC4vjQDZWE9PU_rXBg4BXQ0Xziu2HtgKJS6rEln7Q2786AhHEvq0wB031rCCzBy8_aaPHoZE-loo",
+        "api_key": "your-api-key-here",
         "base_url": "https://api.minimaxi.com/anthropic"
     }
 }
@@ -109,6 +109,44 @@ POST {{apiUrl}}/bots/{{botId}}/stop
 
 ### Restart a bot
 POST {{apiUrl}}/bots/{{botId}}/restart
+
+### ============================================
+### Channels Management (IM integrations)
+### ============================================
+
+### Add Telegram channel
+POST {{apiUrl}}/bots/{{botId}}/channels
+Content-Type: application/json
+
+{
+    "channel": "telegram",
+    "token": "your-telegram-bot-token-here"
+}
+
+### Add Discord channel
+POST {{apiUrl}}/bots/{{botId}}/channels
+Content-Type: application/json
+
+{
+    "channel": "discord",
+    "token": "your-discord-bot-token-here"
+}
+
+### Add Slack channel
+POST {{apiUrl}}/bots/{{botId}}/channels
+Content-Type: application/json
+
+{
+    "channel": "slack",
+    "bot_token": "xoxb-your-bot-token",
+    "app_token": "xapp-your-app-token"
+}
+
+### List channels
+GET {{apiUrl}}/bots/{{botId}}/channels
+
+### Remove a channel
+DELETE {{apiUrl}}/bots/{{botId}}/channels/telegram
 
 ### ============================================
 ### Skills Management

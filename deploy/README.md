@@ -1,5 +1,24 @@
 # Clawork 线上部署指南
 
+## 快速开始
+
+```bash
+# 1. 复制示例配置文件
+cp postgres.example.yaml postgres.yaml
+cp configmap.example.yaml configmap.yaml
+cp clawork.example.yaml clawork.yaml
+cp ingress.example.yaml ingress.yaml
+
+# 2. 修改配置文件中的敏感信息
+# - postgres.yaml: 修改数据库密码
+# - configmap.yaml: 修改数据库连接串
+# - clawork.yaml: 修改镜像地址
+# - ingress.yaml: 修改域名和邮箱
+
+# 3. 运行部署脚本
+./deploy.sh
+```
+
 ## 架构概览
 
 ```

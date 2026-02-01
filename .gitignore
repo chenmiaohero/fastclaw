@@ -30,36 +30,63 @@ vendor/
 .DS_Store
 Thumbs.db
 
-# Config files with secrets
+# Config files with secrets (use .example versions)
 config.toml
 *.local.toml
+*.local.yaml
 
 # Logs
 *.log
 logs/
 
-# Debug
+# Debug local files
 debug/*.log
 
-# Database
+# Database files
 *.db
 *.sqlite
+*.sqlite3
+data/
 
 # Kubernetes
 kubeconfig
 *.kubeconfig
 
-# Environment
+# Environment files
 .env
 .env.*
 !.env.example
 
-# Build
+# Build artifacts
 dist/
 build/
 bin/
+out/
 
 # Temporary files
 tmp/
 temp/
 *.tmp
+
+# Docker
+*.tar
+*.tar.gz
+
+# Deploy files with real values (copy from .example and modify)
+# Keep .example.yaml files, ignore actual yaml files with secrets
+deploy/postgres.yaml
+deploy/configmap.yaml
+deploy/ingress.yaml
+deploy/clawork.yaml
+deploy/secrets.yaml
+!deploy/*.example.yaml
+
+# Local development
+Caddyfile
+*.pem
+*.key
+*.crt
+
+# Coverage
+coverage/
+*.coverprofile
