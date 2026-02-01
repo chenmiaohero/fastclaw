@@ -306,3 +306,74 @@ func RestartDeployment(ctx context.Context, botID string) error {
 	return nil
 }
 
+// UpdateDeploymentConfig updates the deployment with new config and triggers rolling update
+func UpdateDeploymentConfig(ctx context.Context, botID string, config *BotConfig) error {
+	client := GetClient()
+	namespace := GetNamespace()
+	deploymentName := GetDeploymentName(botID)
+
+	// Get current deployment
+	deployment, err := client.AppsV1().Deployments(namespace).Get(ctx, deploymentName, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to get deployment: %w", err)
+	}
+
+	// Get config values
+	gatewayPort := viper.GetInt32("openclaw.gateway_port")
+	if gatewayPort == 0 {
+		gatewayPort = 18789
+	}
+	nodeMaxOldSpaceSize := viper.GetInt("openclaw.node_max_old_space_size")
+	if nodeMaxOldSpaceSize == 0 {
+		nodeMaxOldSpaceSize = 3072
+	}
+
+	// Update token in command
+	token := botID
+	if config != nil && config.AccessToken != "" {
+		token = config.AccessToken
+	}
+
+	// Update container command with new token
+	for i := range deployment.Spec.Template.Spec.Containers {
+		container := &deployment.Spec.Template.Spec.Containers[i]
+		if container.Name == "openclaw" {
+			// Update command
+			container.Command = []string{"node", "/app/openclaw.mjs", "gateway", "--port", fmt.Sprintf("%d", gatewayPort), "--bind", "lan", "--allow-unconfigured", "--dev", "--token", token}
+
+			// Update env vars
+			newEnvs := []corev1.EnvVar{
+				{Name: "OPENCLAW_GATEWAY_TOKEN", Value: token},
+				{Name: "NODE_OPTIONS", Value: fmt.Sprintf("--max-old-space-size=%d", nodeMaxOldSpaceSize)},
+			}
+			if config != nil {
+				if config.APIKey != "" {
+					newEnvs = append(newEnvs, corev1.EnvVar{Name: "ANTHROPIC_API_KEY", Value: config.APIKey})
+				}
+				if config.Model != "" {
+					newEnvs = append(newEnvs, corev1.EnvVar{Name: "CLAUDE_MODEL", Value: config.Model})
+				}
+				if config.BaseURL != "" {
+					newEnvs = append(newEnvs, corev1.EnvVar{Name: "ANTHROPIC_BASE_URL", Value: config.BaseURL})
+				}
+			}
+			container.Env = newEnvs
+			break
+		}
+	}
+
+	// Add restart annotation to trigger rollout
+	if deployment.Spec.Template.Annotations == nil {
+		deployment.Spec.Template.Annotations = make(map[string]string)
+	}
+	deployment.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"] = metav1.Now().Format("2006-01-02T15:04:05Z07:00")
+
+	// Update deployment
+	_, err = client.AppsV1().Deployments(namespace).Update(ctx, deployment, metav1.UpdateOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to update deployment: %w", err)
+	}
+
+	return nil
+}
+

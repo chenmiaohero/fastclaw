@@ -22,11 +22,15 @@ type DeviceInfo struct {
 }
 
 // ListDevices returns the list of pending and paired devices for a bot
+// Query params:
+//   - status: filter by status ("pending" or "paired"), default returns all
 func ListDevices(c echo.Context) error {
 	id := c.Param("id")
 	if id == "" {
 		return util.BadRequest(c, "id is required")
 	}
+
+	statusFilter := c.QueryParam("status") // "pending", "paired", or empty for all
 
 	bot, err := model.GetBotByID(id)
 	if err != nil {
@@ -57,6 +61,17 @@ func ListDevices(c echo.Context) error {
 
 	// Parse the output
 	devices := parseDeviceList(output)
+
+	// Filter by status if specified
+	if statusFilter != "" {
+		var filtered []DeviceInfo
+		for _, d := range devices {
+			if d.Status == statusFilter {
+				filtered = append(filtered, d)
+			}
+		}
+		devices = filtered
+	}
 
 	return util.Success(c, map[string]interface{}{
 		"bot_id":  bot.ID,
@@ -165,6 +180,7 @@ func parseDeviceList(output string) []DeviceInfo {
 
 	inPendingSection := false
 	inPairedSection := false
+	skipNextLine := false // Skip header line after section title
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -172,18 +188,27 @@ func parseDeviceList(output string) []DeviceInfo {
 		if strings.Contains(line, "Pending") {
 			inPendingSection = true
 			inPairedSection = false
+			skipNextLine = true // Skip the header row
 			continue
 		}
 		if strings.Contains(line, "Paired") {
 			inPendingSection = false
 			inPairedSection = true
+			skipNextLine = true // Skip the header row
 			continue
 		}
 
-		// Skip header and separator lines
-		if line == "" || strings.HasPrefix(line, "Request") || strings.HasPrefix(line, "Device") ||
-		   strings.HasPrefix(line, "─") || strings.HasPrefix(line, "│") && strings.Count(line, "│") < 3 {
+		// Skip empty lines and separator lines (containing ─ or ╭ or ╰ etc)
+		if line == "" || strings.ContainsAny(line, "─╭╮╰╯┬┴├┤┼") {
 			continue
+		}
+
+		// Skip header row (contains "Request" or "Device" as column header)
+		if skipNextLine {
+			if strings.Contains(line, "Request") || strings.Contains(line, "Device") {
+				skipNextLine = false
+				continue
+			}
 		}
 
 		// Parse table rows (separated by │)
@@ -201,24 +226,35 @@ func parseDeviceList(output string) []DeviceInfo {
 			}
 		}
 
+		// Skip if first part looks like a header
+		if len(cleanParts) > 0 && (cleanParts[0] == "Request" || cleanParts[0] == "Device") {
+			continue
+		}
+
 		if inPendingSection && len(cleanParts) >= 4 {
 			// Pending: Request | Device | Role | IP | Age | Flags
-			devices = append(devices, DeviceInfo{
-				RequestID: cleanParts[0],
-				DeviceID:  cleanParts[1],
-				Role:      cleanParts[2],
-				IP:        cleanParts[3],
-				Age:       safeGet(cleanParts, 4),
-				Status:    "pending",
-			})
+			// Validate request_id looks like UUID
+			if len(cleanParts[0]) == 36 && strings.Count(cleanParts[0], "-") == 4 {
+				devices = append(devices, DeviceInfo{
+					RequestID: cleanParts[0],
+					DeviceID:  cleanParts[1],
+					Role:      cleanParts[2],
+					IP:        cleanParts[3],
+					Age:       safeGet(cleanParts, 4),
+					Status:    "pending",
+				})
+			}
 		} else if inPairedSection && len(cleanParts) >= 2 {
 			// Paired: Device | Roles | Scopes | Tokens | IP
-			devices = append(devices, DeviceInfo{
-				DeviceID: cleanParts[0],
-				Role:     safeGet(cleanParts, 1),
-				IP:       safeGet(cleanParts, 4),
-				Status:   "paired",
-			})
+			// Validate device_id is not a header
+			if cleanParts[0] != "Device" && len(cleanParts[0]) > 10 {
+				devices = append(devices, DeviceInfo{
+					DeviceID: cleanParts[0],
+					Role:     safeGet(cleanParts, 1),
+					IP:       safeGet(cleanParts, 4),
+					Status:   "paired",
+				})
+			}
 		}
 	}
 

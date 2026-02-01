@@ -30,11 +30,7 @@ func RestartBot(c echo.Context) error {
 
 	ctx := context.Background()
 
-	// Delete old deployment and service to ensure fresh config
-	k8s.DeleteDeployment(ctx, bot.ID)
-	k8s.DeleteService(ctx, bot.ID)
-
-	// Get bot config for deployment
+	// Get bot config
 	var k8sConfig *k8s.BotConfig
 	if botConfig, err := bot.GetConfig(); err == nil && botConfig != nil {
 		k8sConfig = &k8s.BotConfig{
@@ -49,17 +45,12 @@ func RestartBot(c echo.Context) error {
 		}
 	}
 
-	// Recreate deployment with latest config
-	if err := k8s.CreateDeployment(ctx, bot.ID, bot.UserID, k8sConfig); err != nil {
-		return util.InternalError(c, "failed to create deployment: "+err.Error())
+	// Update deployment config and trigger rolling update (zero downtime)
+	if err := k8s.UpdateDeploymentConfig(ctx, bot.ID, k8sConfig); err != nil {
+		return util.InternalError(c, "failed to update deployment: "+err.Error())
 	}
 
-	// Recreate service
-	if _, err := k8s.CreateService(ctx, bot.ID, bot.UserID); err != nil {
-		return util.InternalError(c, "failed to create service: "+err.Error())
-	}
-
-	// Write config file to pod (async)
+	// Write config file to pod (async, after new pod is ready)
 	if k8sConfig != nil && k8sConfig.APIKey != "" {
 		go func() {
 			if err := k8s.WriteConfigToBot(context.Background(), bot.ID, k8sConfig); err != nil {
