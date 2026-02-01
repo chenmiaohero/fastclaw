@@ -1,5 +1,5 @@
 [server]
-port = 8080
+port = 18080
 
 [db]
 host = "localhost"
@@ -13,21 +13,34 @@ timezone = "Asia/Shanghai"
 [kubernetes]
 # 留空使用 in-cluster config 或 ~/.kube/config
 kubeconfig = ""
-namespace = "openclaw"
+namespace = "workany"
+# 本地开发模式：使用 .orb.local 访问 K8s 服务
+# 线上设为 false，使用 .svc.cluster.local
+local_dev = false
 
 [storage]
 # 共享 PVC 名称
-pvc_name = "openclaw-shared-data"
+pvc_name = "clawork-shared-data"
 # NAS 挂载的基础路径 (Pod 内)
-base_path = "/openclaw-data"
+base_path = "/clawork-data"
+
+[domain]
+# 主域名 (用于 API)
+api_domain = "workany.ai"
+# Bot 子域名后缀 (用于 WebChat)
+bot_domain_suffix = "workany.bot"
+# Bot 访问域名模板 (用于返回给客户端)
+bot_domain_template = "https://{bot_id}.workany.bot"
 
 [openclaw]
 # 默认镜像
-image = "openclaw/openclaw:latest"
+image = "1panel/openclaw:latest"
 # Gateway 端口
 gateway_port = 18789
+# Node.js 堆内存大小 (MB)，建议为 memory_limit 的 75%
+node_max_old_space_size = 3072
 # 默认资源限制
-cpu_limit = "500m"
-memory_limit = "512Mi"
-cpu_request = "100m"
-memory_request = "128Mi"
+cpu_limit = "2000m"
+memory_limit = "4Gi"
+cpu_request = "500m"
+memory_request = "1Gi"

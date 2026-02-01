@@ -75,6 +75,10 @@ func CreateDeployment(ctx context.Context, botID, userID string, config *BotConf
 	if memoryRequest == "" {
 		memoryRequest = "128Mi"
 	}
+	nodeMaxOldSpaceSize := viper.GetInt("openclaw.node_max_old_space_size")
+	if nodeMaxOldSpaceSize == 0 {
+		nodeMaxOldSpaceSize = 3072
+	}
 
 	labels := map[string]string{
 		"app":     "openclaw",
@@ -120,7 +124,7 @@ func CreateDeployment(ctx context.Context, botID, userID string, config *BotConf
 									},
 									{
 										Name:  "NODE_OPTIONS",
-										Value: "--max-old-space-size=1536",
+										Value: fmt.Sprintf("--max-old-space-size=%d", nodeMaxOldSpaceSize),
 									},
 								}
 								if config != nil {
