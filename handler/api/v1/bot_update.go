@@ -41,7 +41,7 @@ func UpdateBot(c echo.Context) error {
 
 	if req.Slug != "" {
 		if !isValidSlug(req.Slug) {
-			return util.BadRequest(c, "slug must be 3-50 characters, lowercase letters, numbers, and hyphens only")
+			return util.BadRequest(c, "slug must be 1-50 characters, lowercase letters, numbers, and hyphens only")
 		}
 		// Check if slug is already taken by another bot
 		existing, _ := model.GetBotBySlug(req.Slug)

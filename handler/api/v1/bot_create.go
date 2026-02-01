@@ -38,7 +38,7 @@ func CreateBot(c echo.Context) error {
 	// Validate slug if provided
 	if req.Slug != "" {
 		if !isValidSlug(req.Slug) {
-			return util.BadRequest(c, "slug must be 3-50 characters, lowercase letters, numbers, and hyphens only")
+			return util.BadRequest(c, "slug must be 1-50 characters, lowercase letters, numbers, and hyphens only")
 		}
 		// Check if slug is already taken
 		existing, _ := model.GetBotBySlug(req.Slug)
@@ -77,7 +77,7 @@ func CreateBot(c echo.Context) error {
 }
 
 func isValidSlug(slug string) bool {
-	if len(slug) < 3 || len(slug) > 50 {
+	if len(slug) < 1 || len(slug) > 50 {
 		return false
 	}
 	matched, _ := regexp.MatchString("^[a-z0-9][a-z0-9-]*[a-z0-9]$", slug)
