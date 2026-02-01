@@ -1,7 +1,11 @@
 package v1
 
 import (
+	"fmt"
+	"regexp"
+
 	"github.com/labstack/echo/v4"
+	"github.com/spf13/viper"
 	"github.com/workany-ai/clawork/model"
 	"github.com/workany-ai/clawork/util"
 )
@@ -9,7 +13,13 @@ import (
 type CreateBotRequest struct {
 	UserID string           `json:"user_id" validate:"required"`
 	Name   string           `json:"name" validate:"required"`
+	Slug   string           `json:"slug,omitempty"` // Optional custom slug
 	Config *model.BotConfig `json:"config,omitempty"`
+}
+
+type BotResponse struct {
+	*model.Bot
+	AccessURL string `json:"access_url"`
 }
 
 func CreateBot(c echo.Context) error {
@@ -25,6 +35,18 @@ func CreateBot(c echo.Context) error {
 		return util.BadRequest(c, "name is required")
 	}
 
+	// Validate slug if provided
+	if req.Slug != "" {
+		if !isValidSlug(req.Slug) {
+			return util.BadRequest(c, "slug must be 3-50 characters, lowercase letters, numbers, and hyphens only")
+		}
+		// Check if slug is already taken
+		existing, _ := model.GetBotBySlug(req.Slug)
+		if existing != nil {
+			return util.BadRequest(c, "slug is already taken")
+		}
+	}
+
 	// Check if bot with same name exists for this user
 	existing, _ := model.GetBotByUserAndName(req.UserID, req.Name)
 	if existing != nil {
@@ -34,6 +56,7 @@ func CreateBot(c echo.Context) error {
 	bot := &model.Bot{
 		UserID: req.UserID,
 		Name:   req.Name,
+		Slug:   req.Slug, // Will be auto-generated if empty
 		Status: model.BotStatusCreated,
 	}
 
@@ -47,5 +70,24 @@ func CreateBot(c echo.Context) error {
 		return util.InternalError(c, "failed to create bot")
 	}
 
-	return util.Success(c, bot)
+	return util.Success(c, &BotResponse{
+		Bot:       bot,
+		AccessURL: buildAccessURL(bot.Slug, bot.AccessToken),
+	})
+}
+
+func isValidSlug(slug string) bool {
+	if len(slug) < 3 || len(slug) > 50 {
+		return false
+	}
+	matched, _ := regexp.MatchString("^[a-z0-9][a-z0-9-]*[a-z0-9]$", slug)
+	return matched
+}
+
+func buildAccessURL(slug, token string) string {
+	domain := viper.GetString("domain.bot_domain_suffix")
+	if domain == "" {
+		domain = "workany.bot"
+	}
+	return fmt.Sprintf("https://%s.%s?token=%s", slug, domain, token)
 }

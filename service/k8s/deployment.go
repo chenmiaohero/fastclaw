@@ -31,9 +31,10 @@ func GetServiceName(botID string) string {
 
 // BotConfig holds the configuration for a bot
 type BotConfig struct {
-	Model   string
-	APIKey  string
-	BaseURL string // For MiniMax or other Anthropic-compatible APIs
+	Model       string
+	APIKey      string
+	BaseURL     string // For MiniMax or other Anthropic-compatible APIs
+	AccessToken string // Token for gateway authentication
 }
 
 func CreateDeployment(ctx context.Context, botID, userID string, config *BotConfig) error {
@@ -139,12 +140,22 @@ func CreateDeployment(ctx context.Context, botID, userID string, config *BotConf
 									Protocol:      corev1.ProtocolTCP,
 								},
 							},
-							Command: []string{"node", "/app/openclaw.mjs", "gateway", "--port", fmt.Sprintf("%d", gatewayPort), "--bind", "lan", "--allow-unconfigured", "--dev", "--token", botID},
+							Command: func() []string {
+								token := botID
+								if config != nil && config.AccessToken != "" {
+									token = config.AccessToken
+								}
+								return []string{"node", "/app/openclaw.mjs", "gateway", "--port", fmt.Sprintf("%d", gatewayPort), "--bind", "lan", "--allow-unconfigured", "--dev", "--token", token}
+							}(),
 							Env: func() []corev1.EnvVar {
+								token := botID
+								if config != nil && config.AccessToken != "" {
+									token = config.AccessToken
+								}
 								envs := []corev1.EnvVar{
 									{
 										Name:  "OPENCLAW_GATEWAY_TOKEN",
-										Value: botID,
+										Value: token,
 									},
 									{
 										Name:  "NODE_OPTIONS",

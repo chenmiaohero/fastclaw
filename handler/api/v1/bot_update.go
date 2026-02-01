@@ -12,6 +12,7 @@ import (
 
 type UpdateBotRequest struct {
 	Name   string           `json:"name,omitempty"`
+	Slug   string           `json:"slug,omitempty"`
 	Config *model.BotConfig `json:"config,omitempty"`
 }
 
@@ -36,6 +37,18 @@ func UpdateBot(c echo.Context) error {
 
 	if req.Name != "" {
 		bot.Name = req.Name
+	}
+
+	if req.Slug != "" {
+		if !isValidSlug(req.Slug) {
+			return util.BadRequest(c, "slug must be 3-50 characters, lowercase letters, numbers, and hyphens only")
+		}
+		// Check if slug is already taken by another bot
+		existing, _ := model.GetBotBySlug(req.Slug)
+		if existing != nil && existing.ID != bot.ID {
+			return util.BadRequest(c, "slug is already taken")
+		}
+		bot.Slug = req.Slug
 	}
 
 	if req.Config != nil {

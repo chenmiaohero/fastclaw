@@ -87,6 +87,7 @@ func startServer() {
 		api.POST("/bots/:id/restart", v1.RestartBot)
 		api.GET("/bots/:id/status", v1.GetBotStatus)
 		api.GET("/bots/:id/connect", v1.GetBotConnect)
+		api.POST("/bots/:id/reset-token", v1.ResetBotToken)
 
 		// Skills management
 		api.GET("/bots/:id/skills", v1.ListSkills)

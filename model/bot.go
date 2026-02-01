@@ -1,7 +1,10 @@
 package model
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,14 +22,16 @@ const (
 )
 
 type Bot struct {
-	ID        string          `json:"id" gorm:"primaryKey;type:varchar(36)"`
-	UserID    string          `json:"user_id" gorm:"type:varchar(36);index;not null"`
-	Name      string          `json:"name" gorm:"type:varchar(255);not null"`
-	Status    BotStatus       `json:"status" gorm:"type:varchar(50);default:'created'"`
-	Config    json.RawMessage `json:"config" gorm:"type:jsonb"`
-	Endpoint  string          `json:"endpoint" gorm:"type:varchar(255)"`
-	CreatedAt time.Time       `json:"created_at"`
-	UpdatedAt time.Time       `json:"updated_at"`
+	ID          string          `json:"id" gorm:"primaryKey;type:varchar(36)"`
+	UserID      string          `json:"user_id" gorm:"type:varchar(36);index;not null"`
+	Name        string          `json:"name" gorm:"type:varchar(255);not null"`
+	Slug        string          `json:"slug" gorm:"type:varchar(100);uniqueIndex;not null"`
+	AccessToken string          `json:"access_token" gorm:"type:varchar(64);not null"`
+	Status      BotStatus       `json:"status" gorm:"type:varchar(50);default:'created'"`
+	Config      json.RawMessage `json:"config" gorm:"type:jsonb"`
+	Endpoint    string          `json:"endpoint" gorm:"type:varchar(255)"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
 }
 
 type BotConfig struct {
@@ -55,7 +60,22 @@ func (b *Bot) BeforeCreate(tx *gorm.DB) error {
 	if b.ID == "" {
 		b.ID = uuid.New().String()
 	}
+	// Generate slug if not provided (use first 8 chars of ID)
+	if b.Slug == "" {
+		b.Slug = strings.ReplaceAll(b.ID[:8], "-", "")
+	}
+	// Always generate a secure access token
+	if b.AccessToken == "" {
+		b.AccessToken = generateSecureToken(32)
+	}
 	return nil
+}
+
+// generateSecureToken generates a cryptographically secure random token
+func generateSecureToken(length int) string {
+	bytes := make([]byte, length)
+	rand.Read(bytes)
+	return hex.EncodeToString(bytes)[:length]
 }
 
 func (b *Bot) GetConfig() (*BotConfig, error) {
@@ -100,6 +120,33 @@ func GetBotByUserAndName(userID, name string) (*Bot, error) {
 	return &bot, nil
 }
 
+func GetBotBySlug(slug string) (*Bot, error) {
+	var bot Bot
+	if err := util.GetDB().Where("slug = ?", slug).First(&bot).Error; err != nil {
+		return nil, err
+	}
+	return &bot, nil
+}
+
+func ResetBotAccessToken(id string) (string, error) {
+	newToken := generateSecureToken(32)
+	err := util.GetDB().Model(&Bot{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"access_token": newToken,
+		"updated_at":   time.Now(),
+	}).Error
+	if err != nil {
+		return "", err
+	}
+	return newToken, nil
+}
+
+func UpdateBotSlug(id, slug string) error {
+	return util.GetDB().Model(&Bot{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"slug":       slug,
+		"updated_at": time.Now(),
+	}).Error
+}
+
 func ListBotsByUserID(userID string) ([]*Bot, error) {
 	var bots []*Bot
 	if err := util.GetDB().Where("user_id = ?", userID).Order("created_at DESC").Find(&bots).Error; err != nil {
@@ -129,5 +176,33 @@ func UpdateBotStatus(id string, status BotStatus, endpoint string) error {
 
 // AutoMigrate creates the table if it doesn't exist
 func AutoMigrate() error {
-	return util.GetDB().AutoMigrate(&Bot{})
+	if err := util.GetDB().AutoMigrate(&Bot{}); err != nil {
+		return err
+	}
+	// Migrate existing bots without slug or access_token
+	return migrateExistingBots()
+}
+
+// migrateExistingBots generates slug and access_token for existing bots
+func migrateExistingBots() error {
+	var bots []Bot
+	if err := util.GetDB().Where("slug = '' OR slug IS NULL OR access_token = '' OR access_token IS NULL").Find(&bots).Error; err != nil {
+		return err
+	}
+
+	for _, bot := range bots {
+		updates := map[string]interface{}{}
+		if bot.Slug == "" {
+			updates["slug"] = strings.ReplaceAll(bot.ID[:8], "-", "")
+		}
+		if bot.AccessToken == "" {
+			updates["access_token"] = generateSecureToken(32)
+		}
+		if len(updates) > 0 {
+			if err := util.GetDB().Model(&Bot{}).Where("id = ?", bot.ID).Updates(updates).Error; err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

@@ -34,9 +34,14 @@ func StartBot(c echo.Context) error {
 	var k8sConfig *k8s.BotConfig
 	if botConfig, err := bot.GetConfig(); err == nil && botConfig != nil {
 		k8sConfig = &k8s.BotConfig{
-			Model:   botConfig.Model,
-			APIKey:  botConfig.APIKey,
-			BaseURL: botConfig.BaseURL,
+			Model:       botConfig.Model,
+			APIKey:      botConfig.APIKey,
+			BaseURL:     botConfig.BaseURL,
+			AccessToken: bot.AccessToken,
+		}
+	} else {
+		k8sConfig = &k8s.BotConfig{
+			AccessToken: bot.AccessToken,
 		}
 	}
 

@@ -22,39 +22,39 @@ var upgrader = websocket.Upgrader{
 }
 
 // ProxyToBot proxies requests to the OpenClaw bot
-// Path format: /proxy/{bot_id}/*
+// Path format: /proxy/{bot_id_or_slug}/*
 func ProxyToBot(c echo.Context) error {
-	botID := c.Param("bot_id")
-	if botID == "" {
-		return util.BadRequest(c, "bot_id is required")
+	botIdentifier := c.Param("bot_id")
+	if botIdentifier == "" {
+		return util.BadRequest(c, "bot_id or slug is required")
 	}
 
-	// Auto-inject token if not present (botID is the token)
-	queryString := c.QueryString()
-	if !strings.Contains(queryString, "token=") {
-		if queryString == "" {
-			queryString = "token=" + botID
-		} else {
-			queryString = queryString + "&token=" + botID
-		}
-		c.Request().URL.RawQuery = queryString
-	}
-
-	// Get bot info
-	bot, err := model.GetBotByID(botID)
+	// Get bot info - try by ID first, then by slug
+	bot, err := model.GetBotByID(botIdentifier)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return util.NotFound(c, "bot not found")
+			// Try by slug
+			bot, err = model.GetBotBySlug(botIdentifier)
+			if err != nil {
+				if err == gorm.ErrRecordNotFound {
+					return util.NotFound(c, "bot not found")
+				}
+				return util.InternalError(c, "failed to get bot")
+			}
+		} else {
+			return util.InternalError(c, "failed to get bot")
 		}
-		return util.InternalError(c, "failed to get bot")
 	}
+
+	// Token is no longer auto-injected - user must provide correct token in URL
+	// This ensures only users with the access token can access the bot
 
 	if bot.Status != model.BotStatusRunning {
 		return util.BadRequest(c, "bot is not running")
 	}
 
 	// Get target URL from K8s service (uses ClusterIP in local dev mode, DNS in production)
-	targetHost, err := k8s.GetServiceEndpoint(context.Background(), botID)
+	targetHost, err := k8s.GetServiceEndpoint(context.Background(), bot.ID)
 	if err != nil {
 		return util.InternalError(c, "failed to get service endpoint")
 	}
