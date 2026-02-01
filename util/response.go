@@ -47,3 +47,10 @@ func InternalError(c echo.Context, message string) error {
 		Message: message,
 	})
 }
+
+func Unauthorized(c echo.Context, message string) error {
+	return c.JSON(http.StatusUnauthorized, Response{
+		Code:    401,
+		Message: message,
+	})
+}

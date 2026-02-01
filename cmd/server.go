@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/viper"
 	v1 "github.com/workany-ai/clawork/handler/api/v1"
 	"github.com/workany-ai/clawork/handler/proxy"
+	authmw "github.com/workany-ai/clawork/middleware"
 	"github.com/workany-ai/clawork/service/k8s"
 )
 
@@ -73,6 +74,7 @@ func startServer() {
 
 	// API routes: /bot/api/v1/*
 	api := e.Group("/bot/api/v1")
+	api.Use(authmw.BearerAuth()) // Bearer token authentication
 	{
 		// Bot CRUD
 		api.POST("/bots", v1.CreateBot)

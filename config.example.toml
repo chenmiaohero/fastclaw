@@ -1,6 +1,12 @@
 [server]
 port = 18080
 
+[api]
+# API Bearer Token 认证 (可选)
+# 如果设置，所有 API 请求需要携带 Authorization: Bearer <token>
+# 留空则不启用认证（仅用于开发环境）
+token = ""
+
 [db]
 host = "localhost"
 port = 5432
@@ -35,6 +41,14 @@ bot_domain_template = "https://{bot_id}.workany.bot"
 [openclaw]
 # 默认镜像
 image = "1panel/openclaw:latest"
+# 私有镜像仓库认证 Secret 名称 (可选)
+# 如果使用私有镜像仓库，需要先创建 Secret：
+# kubectl create secret docker-registry acr-secret \
+#   --docker-server=registry.cn-hangzhou.aliyuncs.com \
+#   --docker-username=your-username \
+#   --docker-password=your-password \
+#   -n workany
+image_pull_secret = ""
 # Gateway 端口
 gateway_port = 18789
 # Node.js 堆内存大小 (MB)，建议为 memory_limit 的 75%

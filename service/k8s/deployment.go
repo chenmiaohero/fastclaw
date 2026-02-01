@@ -80,6 +80,7 @@ func CreateDeployment(ctx context.Context, botID, userID string, config *BotConf
 	if nodeMaxOldSpaceSize == 0 {
 		nodeMaxOldSpaceSize = 3072
 	}
+	imagePullSecret := viper.GetString("openclaw.image_pull_secret")
 
 	labels := map[string]string{
 		"app":     "openclaw",
@@ -105,6 +106,12 @@ func CreateDeployment(ctx context.Context, botID, userID string, config *BotConf
 					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
+					ImagePullSecrets: func() []corev1.LocalObjectReference {
+						if imagePullSecret != "" {
+							return []corev1.LocalObjectReference{{Name: imagePullSecret}}
+						}
+						return nil
+					}(),
 					InitContainers: []corev1.Container{
 						{
 							Name:  "init-permissions",
