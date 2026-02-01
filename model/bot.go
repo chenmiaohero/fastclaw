@@ -25,8 +25,8 @@ type Bot struct {
 	ID          string          `json:"id" gorm:"primaryKey;type:varchar(36)"`
 	UserID      string          `json:"user_id" gorm:"type:varchar(36);index;not null"`
 	Name        string          `json:"name" gorm:"type:varchar(255);not null"`
-	Slug        string          `json:"slug" gorm:"type:varchar(100);uniqueIndex;not null"`
-	AccessToken string          `json:"access_token" gorm:"type:varchar(64);not null"`
+	Slug        string          `json:"slug" gorm:"type:varchar(100);uniqueIndex"`
+	AccessToken string          `json:"access_token" gorm:"type:varchar(64)"`
 	Status      BotStatus       `json:"status" gorm:"type:varchar(50);default:'created'"`
 	Config      json.RawMessage `json:"config" gorm:"type:jsonb"`
 	Endpoint    string          `json:"endpoint" gorm:"type:varchar(255)"`
