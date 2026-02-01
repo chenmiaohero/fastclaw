@@ -80,7 +80,8 @@ func isValidSlug(slug string) bool {
 	if len(slug) < 1 || len(slug) > 50 {
 		return false
 	}
-	matched, _ := regexp.MatchString("^[a-z0-9][a-z0-9-]*[a-z0-9]$", slug)
+	// Allow single character or multiple characters (must start and end with alphanumeric)
+	matched, _ := regexp.MatchString("^[a-z0-9]([a-z0-9-]*[a-z0-9])?$", slug)
 	return matched
 }
 
