@@ -118,6 +118,10 @@ func CreateDeployment(ctx context.Context, botID, userID string, config *BotConf
 										Name:  "OPENCLAW_GATEWAY_TOKEN",
 										Value: botID,
 									},
+									{
+										Name:  "NODE_OPTIONS",
+										Value: "--max-old-space-size=1536",
+									},
 								}
 								if config != nil {
 									if config.APIKey != "" {

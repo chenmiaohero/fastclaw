@@ -5,37 +5,36 @@ metadata:
   namespace: workany
 data:
   config.toml: |
-    # Clawork 配置文件
-
     [server]
     port = 18080
 
-    [database]
-    # PostgreSQL 连接串
-    # 格式: postgres://user:password@host:port/dbname?sslmode=disable
-    dsn = "postgres://clawork:your-secure-password-here@postgres:5432/clawork?sslmode=disable"
+    [db]
+    host = "postgres"
+    port = 5432
+    user = "clawork"
+    password = "your-secure-password"
+    database = "clawork"
+    sslmode = "disable"
+    timezone = "Asia/Shanghai"
 
-    [k8s]
-    # Bot Pod 部署的命名空间
+    [kubernetes]
+    kubeconfig = ""
     namespace = "workany"
-
-    [openclaw]
-    # OpenClaw 镜像
-    image = "openclaw/openclaw:latest"
-    # Gateway 端口
-    gateway_port = 18789
-    # 资源限制
-    cpu_limit = "500m"
-    memory_limit = "512Mi"
-    cpu_request = "100m"
-    memory_request = "128Mi"
+    local_dev = false
 
     [storage]
-    # 共享 PVC 名称
-    pvc_name = "openclaw-shared-data"
-    # 数据基础路径
+    pvc_name = "clawork-shared-data"
     base_path = "/openclaw-data"
 
     [domain]
-    # Bot 子域名后缀
+    api_domain = "workany.ai"
     bot_domain_suffix = "workany.bot"
+    bot_domain_template = "https://{bot_id}.workany.bot"
+
+    [openclaw]
+    image = "1panel/openclaw:latest"
+    gateway_port = 18789
+    cpu_limit = "1000m"
+    memory_limit = "2Gi"
+    cpu_request = "200m"
+    memory_request = "512Mi"
