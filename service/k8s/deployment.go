@@ -104,10 +104,34 @@ func CreateDeployment(ctx context.Context, botID, userID string, config *BotConf
 					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
+					InitContainers: []corev1.Container{
+						{
+							Name:  "init-permissions",
+							Image: "alpine:3.19",
+							Command: []string{"sh", "-c", "chown -R 1000:1000 /data && chmod -R 755 /data"},
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "data",
+									MountPath: "/data",
+									SubPath:   botID,
+								},
+							},
+							SecurityContext: &corev1.SecurityContext{
+								RunAsUser:                func() *int64 { v := int64(0); return &v }(),
+								AllowPrivilegeEscalation: func() *bool { v := false; return &v }(),
+								ReadOnlyRootFilesystem:   func() *bool { v := true; return &v }(),
+							},
+						},
+					},
 					Containers: []corev1.Container{
 						{
 							Name:  "openclaw",
 							Image: image,
+							SecurityContext: &corev1.SecurityContext{
+								RunAsUser:                func() *int64 { v := int64(1000); return &v }(),
+								RunAsGroup:               func() *int64 { v := int64(1000); return &v }(),
+								AllowPrivilegeEscalation: func() *bool { v := false; return &v }(),
+							},
 							Ports: []corev1.ContainerPort{
 								{
 									Name:          "gateway",
