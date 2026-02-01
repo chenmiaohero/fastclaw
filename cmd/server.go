@@ -98,6 +98,11 @@ func startServer() {
 		api.POST("/bots/:id/channels", v1.AddChannel)
 		api.GET("/bots/:id/channels", v1.ListChannels)
 		api.DELETE("/bots/:id/channels/:channel", v1.RemoveChannel)
+
+		// Device pairing management
+		api.GET("/bots/:id/devices", v1.ListDevices)
+		api.POST("/bots/:id/devices/:request_id/approve", v1.ApproveDevice)
+		api.DELETE("/bots/:id/devices/:device_id", v1.RevokeDevice)
 	}
 
 	// Health check

@@ -28,6 +28,27 @@ func extractBotID(deploymentName string) string {
 	return deploymentName
 }
 
+// GetPodName returns the name of the running pod for a bot
+func GetPodName(ctx context.Context, botID string) (string, error) {
+	client := GetClient()
+	namespace := GetNamespace()
+
+	pods, err := client.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("app=openclaw,bot-id=%s", botID),
+	})
+	if err != nil {
+		return "", err
+	}
+
+	for _, pod := range pods.Items {
+		if pod.Status.Phase == corev1.PodRunning {
+			return pod.Name, nil
+		}
+	}
+
+	return "", fmt.Errorf("no running pod found for bot %s", botID)
+}
+
 // waitForPodReady waits for a pod to be ready and returns its name
 func waitForPodReady(ctx context.Context, botID string, timeoutSeconds int) (string, error) {
 	client := GetClient()

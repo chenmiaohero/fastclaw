@@ -63,9 +63,6 @@ func StartBot(c echo.Context) error {
 		return util.InternalError(c, "failed to update bot status")
 	}
 
-	// Always start auto-approve immediately so pairing works right away
-	k8s.StartAutoApprove(bot.ID)
-
 	// Write config file to pod (async, don't block the response)
 	if k8sConfig != nil && k8sConfig.APIKey != "" {
 		go func() {
