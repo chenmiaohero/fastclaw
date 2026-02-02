@@ -93,3 +93,4 @@ coverage/
 
 deploy*
 debug*
+*.txt

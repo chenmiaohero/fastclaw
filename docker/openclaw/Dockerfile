@@ -3,27 +3,26 @@
 
 FROM 1panel/openclaw:latest
 
-# Switch to root for installation
 USER root
 
-# Create extensions directory
-RUN mkdir -p /home/node/.openclaw/extensions && \
-    chown -R node:node /home/node/.openclaw
-
-# Switch to node user for npm operations
-USER node
-
-# Set working directory
-WORKDIR /home/node
-
-# Pre-install feishu plugin (available for use, not enabled by default)
-# Users enable plugins at runtime via clawork API or openclaw config
-RUN npm install @m1heng-clawd/feishu --prefix /home/node/.openclaw/extensions/feishu --legacy-peer-deps || true
+# Install feishu plugin to /app/extensions/
+# Using npm pack to download and extract with correct directory structure
+RUN cd /tmp && \
+    npm pack @m1heng-clawd/feishu && \
+    mkdir -p /app/extensions/feishu && \
+    tar -xzf m1heng-clawd-feishu-*.tgz -C /app/extensions/feishu --strip-components=1 && \
+    cd /app/extensions/feishu && \
+    npm install --omit=dev && \
+    rm -f /tmp/m1heng-clawd-feishu-*.tgz && \
+    chown -R node:node /app/extensions/feishu
 
 # Add more plugins here as needed:
-# RUN npm install @some-scope/another-plugin --prefix /home/node/.openclaw/extensions/another-plugin || true
+# RUN cd /tmp && \
+#     npm pack @some-scope/another-plugin && \
+#     mkdir -p /app/extensions/another-plugin && \
+#     tar -xzf *.tgz -C /app/extensions/another-plugin --strip-components=1 && \
+#     cd /app/extensions/another-plugin && npm install --omit=dev && \
+#     rm -f /tmp/*.tgz && \
+#     chown -R node:node /app/extensions/another-plugin
 
-# Note: Plugin enablement is handled at runtime by each bot's configuration
-# Do NOT pre-configure plugins.json here - let users control it
-
-# Default command (inherit from base image)
+USER node
