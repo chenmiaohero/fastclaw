@@ -94,12 +94,13 @@ func getTrustedProxies() string {
 }
 
 // getAllowedOrigins returns the allowed origins list from config
-// Defaults to ["*"] to allow all origins if not configured
+// Returns empty string if not configured (OpenClaw may not support this in all versions)
 func getAllowedOrigins() string {
 	origins := viper.GetStringSlice("openclaw.allowed_origins")
 	if len(origins) == 0 {
-		// Default: allow all origins (required for dynamic subdomains like cd108c8f.workany.loc)
-		return `["*"]`
+		// Don't set allowedOrigins by default - some OpenClaw versions don't support it
+		// The proxy already rewrites Origin header to bypass origin checks
+		return ""
 	}
 	// Format as JSON array
 	quoted := make([]string, len(origins))
