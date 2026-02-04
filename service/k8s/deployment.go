@@ -150,11 +150,11 @@ func CreateDeployment(ctx context.Context, botID, userID, accessToken string, co
 									Protocol:      corev1.ProtocolTCP,
 								},
 							},
-							// Write config file before starting gateway (password auth via config file)
+							// Write full config file before starting gateway (password auth via config file)
 							Command: func() []string {
 								if config != nil && config.Password != "" {
-									// Generate config JSON and write before starting gateway
-									configJSON := BuildGatewayConfig(config, gatewayPort)
+									// Generate full config JSON (including models) and write before starting gateway
+									configJSON := buildOpenClawConfig(config, true)
 									return []string{"sh", "-c", fmt.Sprintf(`cat > /home/node/.openclaw/openclaw.json << 'EOFCONFIG'
 %s
 EOFCONFIG
@@ -356,9 +356,10 @@ func UpdateDeploymentConfig(ctx context.Context, botID, accessToken string, conf
 	for i := range deployment.Spec.Template.Spec.Containers {
 		container := &deployment.Spec.Template.Spec.Containers[i]
 		if container.Name == "openclaw" {
-			// Update command - write config before starting gateway
+			// Update command - write full config (including models) before starting gateway
 			if config != nil && config.Password != "" {
-				configJSON := BuildGatewayConfig(config, gatewayPort)
+				// Use full config to preserve models section
+				configJSON := buildOpenClawConfig(config, true)
 				container.Command = []string{"sh", "-c", fmt.Sprintf(`cat > /home/node/.openclaw/openclaw.json << 'EOFCONFIG'
 %s
 EOFCONFIG
