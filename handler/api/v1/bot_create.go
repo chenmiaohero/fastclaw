@@ -3,18 +3,22 @@ package v1
 import (
 	"fmt"
 	"regexp"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/spf13/viper"
+	"github.com/workany-ai/clawork/middleware"
 	"github.com/workany-ai/clawork/model"
 	"github.com/workany-ai/clawork/util"
 )
 
 type CreateBotRequest struct {
-	UserID string           `json:"user_id" validate:"required"`
-	Name   string           `json:"name" validate:"required"`
-	Slug   string           `json:"slug,omitempty"` // Optional custom slug
-	Config *model.BotConfig `json:"config,omitempty"`
+	UserID    string           `json:"user_id" validate:"required"`
+	Name      string           `json:"name" validate:"required"`
+	Password  string           `json:"password" validate:"required"` // Gateway authentication password (required)
+	Slug      string           `json:"slug,omitempty"`               // Optional custom slug
+	Config    *model.BotConfig `json:"config,omitempty"`
+	ExpiresAt *time.Time       `json:"expires_at,omitempty"` // Optional expiration time
 }
 
 type BotResponse struct {
@@ -33,6 +37,12 @@ func CreateBot(c echo.Context) error {
 	}
 	if req.Name == "" {
 		return util.BadRequest(c, "name is required")
+	}
+	if req.Password == "" {
+		return util.BadRequest(c, "password is required")
+	}
+	if len(req.Password) < 4 {
+		return util.BadRequest(c, "password must be at least 4 characters")
 	}
 
 	// Validate slug if provided
@@ -53,13 +63,23 @@ func CreateBot(c echo.Context) error {
 		return util.BadRequest(c, "bot with this name already exists")
 	}
 
-	bot := &model.Bot{
-		UserID: req.UserID,
-		Name:   req.Name,
-		Slug:   req.Slug, // Will be auto-generated if empty
-		Status: model.BotStatusCreated,
+	// Get app_id from authenticated app context
+	var appID string
+	if app := middleware.GetAppFromContext(c); app != nil {
+		appID = app.ID
 	}
 
+	bot := &model.Bot{
+		AppID:     appID,
+		UserID:    req.UserID,
+		Name:      req.Name,
+		Slug:      req.Slug, // Will be auto-generated if empty
+		Password:  req.Password,
+		Status:    model.BotStatusCreated,
+		ExpiresAt: req.ExpiresAt,
+	}
+
+	// Set config if provided
 	if req.Config != nil {
 		if err := bot.SetConfig(req.Config); err != nil {
 			return util.InternalError(c, "failed to set config")
@@ -72,7 +92,7 @@ func CreateBot(c echo.Context) error {
 
 	return util.Success(c, &BotResponse{
 		Bot:       bot,
-		AccessURL: buildAccessURL(bot.Slug, bot.AccessToken),
+		AccessURL: buildAccessURL(bot.Slug),
 	})
 }
 
@@ -85,10 +105,10 @@ func isValidSlug(slug string) bool {
 	return matched
 }
 
-func buildAccessURL(slug, token string) string {
+func buildAccessURL(slug string) string {
 	domain := viper.GetString("domain.bot_domain_suffix")
 	if domain == "" {
 		domain = "workany.bot"
 	}
-	return fmt.Sprintf("https://%s.%s?token=%s", slug, domain, token)
+	return fmt.Sprintf("https://%s.%s", slug, domain)
 }

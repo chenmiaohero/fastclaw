@@ -31,13 +31,16 @@ func GetServiceName(botID string) string {
 
 // BotConfig holds the configuration for a bot
 type BotConfig struct {
-	Model       string
-	APIKey      string
-	BaseURL     string // For MiniMax or other Anthropic-compatible APIs
-	AccessToken string // Token for gateway authentication
+	Provider string // Provider key name in openclaw config (e.g., "anthropic", "minimax")
+	Model    string
+	APIKey   string
+	BaseURL  string // For MiniMax or other Anthropic-compatible APIs
+	Auth     string // Auth mode: "api-key" (default), "bearer", etc.
+	API      string // API format: "anthropic-messages" (default), "openai-completions", etc.
+	Password string // Gateway authentication password
 }
 
-func CreateDeployment(ctx context.Context, botID, userID string, config *BotConfig) error {
+func CreateDeployment(ctx context.Context, botID, userID, accessToken string, config *BotConfig) error {
 	client := GetClient()
 	namespace := GetNamespace()
 	deploymentName := GetDeploymentName(botID)
@@ -147,23 +150,20 @@ func CreateDeployment(ctx context.Context, botID, userID string, config *BotConf
 									Protocol:      corev1.ProtocolTCP,
 								},
 							},
+							// Write config file before starting gateway (password auth via config file)
 							Command: func() []string {
-								token := botID
-								if config != nil && config.AccessToken != "" {
-									token = config.AccessToken
+								if config != nil && config.Password != "" {
+									// Generate config JSON and write before starting gateway
+									configJSON := BuildGatewayConfig(config, gatewayPort)
+									return []string{"sh", "-c", fmt.Sprintf(`cat > /home/node/.openclaw/openclaw.json << 'EOFCONFIG'
+%s
+EOFCONFIG
+node /app/openclaw.mjs gateway --port %d --bind lan --allow-unconfigured --dev`, configJSON, gatewayPort)}
 								}
-								return []string{"node", "/app/openclaw.mjs", "gateway", "--port", fmt.Sprintf("%d", gatewayPort), "--bind", "lan", "--allow-unconfigured", "--dev", "--token", token}
+								return []string{"node", "/app/openclaw.mjs", "gateway", "--port", fmt.Sprintf("%d", gatewayPort), "--bind", "lan", "--allow-unconfigured", "--dev"}
 							}(),
 							Env: func() []corev1.EnvVar {
-								token := botID
-								if config != nil && config.AccessToken != "" {
-									token = config.AccessToken
-								}
 								envs := []corev1.EnvVar{
-									{
-										Name:  "OPENCLAW_GATEWAY_TOKEN",
-										Value: token,
-									},
 									{
 										Name:  "NODE_OPTIONS",
 										Value: fmt.Sprintf("--max-old-space-size=%d", nodeMaxOldSpaceSize),
@@ -288,6 +288,23 @@ func GetDeploymentStatus(ctx context.Context, botID string) (bool, error) {
 	return deployment.Status.ReadyReplicas > 0, nil
 }
 
+// DeploymentExists checks if a deployment exists for the given bot
+func DeploymentExists(ctx context.Context, botID string) (bool, error) {
+	client := GetClient()
+	namespace := GetNamespace()
+	deploymentName := GetDeploymentName(botID)
+
+	_, err := client.AppsV1().Deployments(namespace).Get(ctx, deploymentName, metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to get deployment: %w", err)
+	}
+
+	return true, nil
+}
+
 func RestartDeployment(ctx context.Context, botID string) error {
 	client := GetClient()
 	namespace := GetNamespace()
@@ -314,7 +331,7 @@ func RestartDeployment(ctx context.Context, botID string) error {
 }
 
 // UpdateDeploymentConfig updates the deployment with new config and triggers rolling update
-func UpdateDeploymentConfig(ctx context.Context, botID string, config *BotConfig) error {
+func UpdateDeploymentConfig(ctx context.Context, botID, accessToken string, config *BotConfig) error {
 	client := GetClient()
 	namespace := GetNamespace()
 	deploymentName := GetDeploymentName(botID)
@@ -335,22 +352,23 @@ func UpdateDeploymentConfig(ctx context.Context, botID string, config *BotConfig
 		nodeMaxOldSpaceSize = 3072
 	}
 
-	// Update token in command
-	token := botID
-	if config != nil && config.AccessToken != "" {
-		token = config.AccessToken
-	}
-
-	// Update container command with new token
+	// Update container - write config file before starting gateway
 	for i := range deployment.Spec.Template.Spec.Containers {
 		container := &deployment.Spec.Template.Spec.Containers[i]
 		if container.Name == "openclaw" {
-			// Update command
-			container.Command = []string{"node", "/app/openclaw.mjs", "gateway", "--port", fmt.Sprintf("%d", gatewayPort), "--bind", "lan", "--allow-unconfigured", "--dev", "--token", token}
+			// Update command - write config before starting gateway
+			if config != nil && config.Password != "" {
+				configJSON := BuildGatewayConfig(config, gatewayPort)
+				container.Command = []string{"sh", "-c", fmt.Sprintf(`cat > /home/node/.openclaw/openclaw.json << 'EOFCONFIG'
+%s
+EOFCONFIG
+node /app/openclaw.mjs gateway --port %d --bind lan --allow-unconfigured --dev`, configJSON, gatewayPort)}
+			} else {
+				container.Command = []string{"node", "/app/openclaw.mjs", "gateway", "--port", fmt.Sprintf("%d", gatewayPort), "--bind", "lan", "--allow-unconfigured", "--dev"}
+			}
 
 			// Update env vars
 			newEnvs := []corev1.EnvVar{
-				{Name: "OPENCLAW_GATEWAY_TOKEN", Value: token},
 				{Name: "NODE_OPTIONS", Value: fmt.Sprintf("--max-old-space-size=%d", nodeMaxOldSpaceSize)},
 			}
 			if config != nil {

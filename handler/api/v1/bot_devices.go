@@ -2,7 +2,10 @@ package v1
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/workany-ai/clawork/model"
@@ -13,12 +16,65 @@ import (
 
 // DeviceInfo represents a device in the pairing list
 type DeviceInfo struct {
-	RequestID string `json:"request_id,omitempty"`
-	DeviceID  string `json:"device_id"`
-	Role      string `json:"role,omitempty"`
-	IP        string `json:"ip,omitempty"`
-	Age       string `json:"age,omitempty"`
-	Status    string `json:"status"` // pending or paired
+	RequestID  string `json:"request_id,omitempty"`
+	DeviceID   string `json:"device_id"`
+	Role       string `json:"role,omitempty"`
+	Platform   string `json:"platform,omitempty"`
+	ClientID   string `json:"client_id,omitempty"`
+	ClientMode string `json:"client_mode,omitempty"`
+	IP         string `json:"ip,omitempty"`
+	Age        string `json:"age,omitempty"`
+	Revoked    bool   `json:"revoked,omitempty"`
+	Status     string `json:"status"` // pending, paired, or revoked
+}
+
+// openclawDeviceList represents the JSON output from openclaw devices list --json
+type openclawDeviceList struct {
+	Pending []openclawPendingDevice `json:"pending"`
+	Paired  []openclawPairedDevice  `json:"paired"`
+}
+
+type openclawPendingDevice struct {
+	RequestID  string `json:"requestId"`
+	DeviceID   string `json:"deviceId"`
+	Role       string `json:"role"`
+	Platform   string `json:"platform"`
+	ClientID   string `json:"clientId"`
+	ClientMode string `json:"clientMode"`
+	IP         string `json:"ip"`
+	Ts         int64  `json:"ts"` // timestamp in ms
+}
+
+type openclawPairedDevice struct {
+	DeviceID     string                `json:"deviceId"`
+	Role         string                `json:"role"`
+	Platform     string                `json:"platform"`
+	ClientID     string                `json:"clientId"`
+	ClientMode   string                `json:"clientMode"`
+	CreatedAtMs  int64                 `json:"createdAtMs"`
+	ApprovedAtMs int64                 `json:"approvedAtMs"`
+	Tokens       []openclawDeviceToken `json:"tokens"`
+}
+
+type openclawDeviceToken struct {
+	Role        string `json:"role"`
+	RevokedAtMs int64  `json:"revokedAtMs,omitempty"`
+}
+
+// formatAge formats a duration as a human-readable age string
+func formatAge(ms int64) string {
+	if ms == 0 {
+		return ""
+	}
+	d := time.Since(time.UnixMilli(ms))
+	if d < time.Minute {
+		return fmt.Sprintf("%ds ago", int(d.Seconds()))
+	} else if d < time.Hour {
+		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+	} else if d < 24*time.Hour {
+		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	}
+	return fmt.Sprintf("%dd ago", int(d.Hours()/24))
 }
 
 // ListDevices returns the list of pending and paired devices for a bot
@@ -52,15 +108,64 @@ func ListDevices(c echo.Context) error {
 		return util.InternalError(c, "failed to get pod: "+err.Error())
 	}
 
-	// Execute devices list command
+	// Execute devices list command with --json flag and token for gateway auth
 	output, err := k8s.ExecInPod(ctx, k8s.GetNamespace(), podName, "openclaw",
-		[]string{"node", "/app/openclaw.mjs", "devices", "list"})
+		[]string{"node", "/app/openclaw.mjs", "devices", "list", "--json", "--token", bot.AccessToken})
 	if err != nil {
 		return util.InternalError(c, "failed to list devices: "+err.Error())
 	}
 
-	// Parse the output
-	devices := parseDeviceList(output)
+	// Parse JSON output
+	var deviceList openclawDeviceList
+	if err := json.Unmarshal([]byte(output), &deviceList); err != nil {
+		return util.InternalError(c, "failed to parse devices: "+err.Error())
+	}
+
+	// Convert to DeviceInfo
+	var devices []DeviceInfo
+	for _, d := range deviceList.Pending {
+		devices = append(devices, DeviceInfo{
+			RequestID:  d.RequestID,
+			DeviceID:   d.DeviceID,
+			Role:       d.Role,
+			Platform:   d.Platform,
+			ClientID:   d.ClientID,
+			ClientMode: d.ClientMode,
+			IP:         d.IP,
+			Age:        formatAge(d.Ts),
+			Status:     "pending",
+		})
+	}
+	for _, d := range deviceList.Paired {
+		// Check if device is revoked (all tokens revoked)
+		revoked := false
+		if len(d.Tokens) > 0 {
+			allRevoked := true
+			for _, t := range d.Tokens {
+				if t.RevokedAtMs == 0 {
+					allRevoked = false
+					break
+				}
+			}
+			revoked = allRevoked
+		}
+
+		status := "paired"
+		if revoked {
+			status = "revoked"
+		}
+
+		devices = append(devices, DeviceInfo{
+			DeviceID:   d.DeviceID,
+			Role:       d.Role,
+			Platform:   d.Platform,
+			ClientID:   d.ClientID,
+			ClientMode: d.ClientMode,
+			Age:        formatAge(d.ApprovedAtMs),
+			Revoked:    revoked,
+			Status:     status,
+		})
+	}
 
 	// Filter by status if specified
 	if statusFilter != "" {
@@ -111,9 +216,9 @@ func ApproveDevice(c echo.Context) error {
 		return util.InternalError(c, "failed to get pod: "+err.Error())
 	}
 
-	// Execute approve command
+	// Execute approve command with token for gateway auth
 	output, err := k8s.ExecInPod(ctx, k8s.GetNamespace(), podName, "openclaw",
-		[]string{"node", "/app/openclaw.mjs", "devices", "approve", requestID})
+		[]string{"node", "/app/openclaw.mjs", "devices", "approve", requestID, "--token", bot.AccessToken})
 	if err != nil {
 		return util.InternalError(c, "failed to approve device: "+err.Error())
 	}
@@ -127,9 +232,15 @@ func ApproveDevice(c echo.Context) error {
 }
 
 // RevokeDevice revokes a paired device
+// Query params:
+//   - role: the role to revoke (default: "user")
 func RevokeDevice(c echo.Context) error {
 	id := c.Param("id")
 	deviceID := c.Param("device_id")
+	role := c.QueryParam("role")
+	if role == "" {
+		role = "operator" // default role
+	}
 
 	if id == "" {
 		return util.BadRequest(c, "id is required")
@@ -158,9 +269,9 @@ func RevokeDevice(c echo.Context) error {
 		return util.InternalError(c, "failed to get pod: "+err.Error())
 	}
 
-	// Execute revoke command
+	// Execute revoke command with token for gateway auth
 	output, err := k8s.ExecInPod(ctx, k8s.GetNamespace(), podName, "openclaw",
-		[]string{"node", "/app/openclaw.mjs", "devices", "revoke", deviceID})
+		[]string{"node", "/app/openclaw.mjs", "devices", "revoke", "--device", deviceID, "--role", role, "--token", bot.AccessToken})
 	if err != nil {
 		return util.InternalError(c, "failed to revoke device: "+err.Error())
 	}
@@ -168,102 +279,9 @@ func RevokeDevice(c echo.Context) error {
 	return util.Success(c, map[string]interface{}{
 		"bot_id":    bot.ID,
 		"device_id": deviceID,
+		"role":      role,
 		"message":   "device revoked",
 		"output":    strings.TrimSpace(output),
 	})
 }
 
-// parseDeviceList parses the output of `openclaw devices list`
-func parseDeviceList(output string) []DeviceInfo {
-	var devices []DeviceInfo
-	lines := strings.Split(output, "\n")
-
-	inPendingSection := false
-	inPairedSection := false
-	skipNextLine := false // Skip header line after section title
-
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-
-		if strings.Contains(line, "Pending") {
-			inPendingSection = true
-			inPairedSection = false
-			skipNextLine = true // Skip the header row
-			continue
-		}
-		if strings.Contains(line, "Paired") {
-			inPendingSection = false
-			inPairedSection = true
-			skipNextLine = true // Skip the header row
-			continue
-		}
-
-		// Skip empty lines and separator lines (containing ─ or ╭ or ╰ etc)
-		if line == "" || strings.ContainsAny(line, "─╭╮╰╯┬┴├┤┼") {
-			continue
-		}
-
-		// Skip header row (contains "Request" or "Device" as column header)
-		if skipNextLine {
-			if strings.Contains(line, "Request") || strings.Contains(line, "Device") {
-				skipNextLine = false
-				continue
-			}
-		}
-
-		// Parse table rows (separated by │)
-		parts := strings.Split(line, "│")
-		if len(parts) < 3 {
-			continue
-		}
-
-		// Clean up parts
-		var cleanParts []string
-		for _, p := range parts {
-			p = strings.TrimSpace(p)
-			if p != "" {
-				cleanParts = append(cleanParts, p)
-			}
-		}
-
-		// Skip if first part looks like a header
-		if len(cleanParts) > 0 && (cleanParts[0] == "Request" || cleanParts[0] == "Device") {
-			continue
-		}
-
-		if inPendingSection && len(cleanParts) >= 4 {
-			// Pending: Request | Device | Role | IP | Age | Flags
-			// Validate request_id looks like UUID
-			if len(cleanParts[0]) == 36 && strings.Count(cleanParts[0], "-") == 4 {
-				devices = append(devices, DeviceInfo{
-					RequestID: cleanParts[0],
-					DeviceID:  cleanParts[1],
-					Role:      cleanParts[2],
-					IP:        cleanParts[3],
-					Age:       safeGet(cleanParts, 4),
-					Status:    "pending",
-				})
-			}
-		} else if inPairedSection && len(cleanParts) >= 2 {
-			// Paired: Device | Roles | Scopes | Tokens | IP
-			// Validate device_id is not a header
-			if cleanParts[0] != "Device" && len(cleanParts[0]) > 10 {
-				devices = append(devices, DeviceInfo{
-					DeviceID: cleanParts[0],
-					Role:     safeGet(cleanParts, 1),
-					IP:       safeGet(cleanParts, 4),
-					Status:   "paired",
-				})
-			}
-		}
-	}
-
-	return devices
-}
-
-func safeGet(arr []string, index int) string {
-	if index < len(arr) {
-		return arr[index]
-	}
-	return ""
-}

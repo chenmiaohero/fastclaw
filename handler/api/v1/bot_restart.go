@@ -31,27 +31,26 @@ func RestartBot(c echo.Context) error {
 	ctx := context.Background()
 
 	// Get bot config
-	var k8sConfig *k8s.BotConfig
+	k8sConfig := &k8s.BotConfig{
+		Password: bot.Password, // Use bot.Password from DB field
+	}
 	if botConfig, err := bot.GetConfig(); err == nil && botConfig != nil {
-		k8sConfig = &k8s.BotConfig{
-			Model:       botConfig.Model,
-			APIKey:      botConfig.APIKey,
-			BaseURL:     botConfig.BaseURL,
-			AccessToken: bot.AccessToken,
-		}
-	} else {
-		k8sConfig = &k8s.BotConfig{
-			AccessToken: bot.AccessToken,
-		}
+		k8sConfig.Provider = botConfig.Provider
+		k8sConfig.Model = botConfig.Model
+		k8sConfig.APIKey = botConfig.APIKey
+		k8sConfig.BaseURL = botConfig.BaseURL
+		k8sConfig.Auth = botConfig.Auth
+		k8sConfig.API = botConfig.API
 	}
 
 	// Update deployment config and trigger rolling update (zero downtime)
-	if err := k8s.UpdateDeploymentConfig(ctx, bot.ID, k8sConfig); err != nil {
+	if err := k8s.UpdateDeploymentConfig(ctx, bot.ID, bot.AccessToken, k8sConfig); err != nil {
 		return util.InternalError(c, "failed to update deployment: "+err.Error())
 	}
 
 	// Write config file to pod (async, after new pod is ready)
-	if k8sConfig != nil && k8sConfig.APIKey != "" {
+	// Config is required for password auth
+	if k8sConfig.Password != "" {
 		go func() {
 			if err := k8s.WriteConfigToBot(context.Background(), bot.ID, k8sConfig); err != nil {
 				c.Logger().Errorf("failed to write config to bot: %v", err)

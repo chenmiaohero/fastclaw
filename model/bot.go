@@ -23,21 +23,27 @@ const (
 
 type Bot struct {
 	ID          string          `json:"id" gorm:"primaryKey;type:varchar(36)"`
+	AppID       string          `json:"app_id" gorm:"type:varchar(36);index;not null"`
 	UserID      string          `json:"user_id" gorm:"type:varchar(36);index;not null"`
 	Name        string          `json:"name" gorm:"type:varchar(255);not null"`
 	Slug        string          `json:"slug" gorm:"type:varchar(100);uniqueIndex"`
 	AccessToken string          `json:"access_token" gorm:"type:varchar(64)"`
+	Password    string          `json:"-" gorm:"type:varchar(64)"` // Gateway authentication password (not exposed in JSON)
 	Status      BotStatus       `json:"status" gorm:"type:varchar(50);default:'created'"`
 	Config      json.RawMessage `json:"config" gorm:"type:jsonb"`
 	Endpoint    string          `json:"endpoint" gorm:"type:varchar(255)"`
+	ExpiresAt   *time.Time      `json:"expires_at,omitempty" gorm:"type:timestamp;index"` // nil means never expires
 	CreatedAt   time.Time       `json:"created_at"`
 	UpdatedAt   time.Time       `json:"updated_at"`
 }
 
 type BotConfig struct {
+	Provider   string      `json:"provider,omitempty"`  // Provider key name in openclaw config (e.g., "anthropic", "minimax")
 	Model      string      `json:"model,omitempty"`
 	APIKey     string      `json:"api_key,omitempty"`
 	BaseURL    string      `json:"base_url,omitempty"` // For MiniMax or other Anthropic-compatible APIs
+	Auth       string      `json:"auth,omitempty"`     // Auth mode: "api-key" (default), "bearer", etc.
+	API        string      `json:"api,omitempty"`      // API format: "anthropic-messages" (default), "openai-completions", etc.
 	AgentsMD   string      `json:"agents_md,omitempty"`
 	SoulMD     string      `json:"soul_md,omitempty"`
 	ToolsMD    string      `json:"tools_md,omitempty"`
@@ -155,6 +161,21 @@ func ListBotsByUserID(userID string) ([]*Bot, error) {
 	return bots, nil
 }
 
+func ListBotsByAppAndUser(appID, userID string) ([]*Bot, error) {
+	var bots []*Bot
+	query := util.GetDB()
+	if appID != "" {
+		query = query.Where("app_id = ?", appID)
+	}
+	if userID != "" {
+		query = query.Where("user_id = ?", userID)
+	}
+	if err := query.Order("created_at DESC").Find(&bots).Error; err != nil {
+		return nil, err
+	}
+	return bots, nil
+}
+
 func UpdateBot(bot *Bot) error {
 	return util.GetDB().Save(bot).Error
 }
@@ -176,6 +197,10 @@ func UpdateBotStatus(id string, status BotStatus, endpoint string) error {
 
 // AutoMigrate creates the table if it doesn't exist
 func AutoMigrate() error {
+	// Migrate apps table first (since bots depend on apps)
+	if err := AutoMigrateApp(); err != nil {
+		return err
+	}
 	if err := util.GetDB().AutoMigrate(&Bot{}); err != nil {
 		return err
 	}

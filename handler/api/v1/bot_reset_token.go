@@ -41,7 +41,7 @@ func ResetBotToken(c echo.Context) error {
 	return util.Success(c, map[string]interface{}{
 		"id":           bot.ID,
 		"access_token": newToken,
-		"access_url":   buildAccessURL(bot.Slug, newToken),
-		"message":      "access token has been reset, existing paired devices will remain paired",
+		"access_url":   buildAccessURL(bot.Slug),
+		"message":      "access token has been reset",
 	})
 }

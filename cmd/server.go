@@ -107,6 +107,19 @@ func startServer() {
 		api.DELETE("/bots/:id/devices/:device_id", v1.RevokeDevice)
 	}
 
+	// Admin API routes: /bot/api/v1/admin/* (requires admin token)
+	admin := e.Group("/bot/api/v1/admin")
+	admin.Use(authmw.AdminAuth())
+	{
+		// App management
+		admin.POST("/apps", v1.CreateApp)
+		admin.GET("/apps", v1.ListApps)
+		admin.GET("/apps/:id", v1.GetApp)
+		admin.PUT("/apps/:id", v1.UpdateApp)
+		admin.DELETE("/apps/:id", v1.DeleteApp)
+		admin.POST("/apps/:id/reset-token", v1.ResetAppToken)
+	}
+
 	// Health check
 	e.GET("/health", func(c echo.Context) error {
 		return c.JSON(200, map[string]string{"status": "ok"})

@@ -2,10 +2,15 @@
 port = 18080
 
 [api]
-# API Bearer Token 认证 (可选)
+# API Bearer Token 认证 (可选，兼容旧版本)
 # 如果设置，所有 API 请求需要携带 Authorization: Bearer <token>
+# 新版本推荐使用 apps 表管理多租户 token
 # 留空则不启用认证（仅用于开发环境）
 token = ""
+
+# 管理员 Token (用于管理 apps)
+# 设置后可以通过 /bot/api/v1/admin/* 路由管理应用
+admin_token = ""
 
 [db]
 host = "localhost"
@@ -58,3 +63,11 @@ cpu_limit = "2000m"
 memory_limit = "4Gi"
 cpu_request = "500m"
 memory_request = "1Gi"
+# 以下 gateway 配置为可选项，不配置时 OpenClaw 使用默认行为（允许所有 origin）
+# 仅在需要精确控制时才配置这些选项
+#
+# 信任的代理 IP 地址列表 (用于正确获取客户端真实 IP)
+# trusted_proxies = ["10.42.0.1", "192.168.1.1"]
+#
+# 允许的 WebSocket Origin 列表 (用于 OpenClaw WebUI 访问)
+# allowed_origins = ["https://*.workany.loc", "https://*.workany.bot"]

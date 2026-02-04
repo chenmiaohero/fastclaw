@@ -8,7 +8,8 @@ import (
 
 // AddChannelToBot adds an IM channel to a bot's OpenClaw instance
 // This is hot-loaded, no restart needed
-func AddChannelToBot(ctx context.Context, botID, channel, token, botToken, appToken string) error {
+// accessToken is the bot's access token for gateway authentication
+func AddChannelToBot(ctx context.Context, botID, accessToken, channel, token, botToken, appToken string) error {
 	namespace := GetNamespace()
 
 	// Get pod name
@@ -17,17 +18,19 @@ func AddChannelToBot(ctx context.Context, botID, channel, token, botToken, appTo
 		return fmt.Errorf("failed to get pod: %w", err)
 	}
 
-	// Build command based on channel type
+	// Build command based on channel type (all commands include gateway auth token)
 	var command []string
 	switch channel {
 	case "telegram":
 		command = []string{"node", "/app/openclaw.mjs", "channels", "add",
 			"--channel", "telegram",
-			"--token", token}
+			"--token", token,
+			"--gateway-token", accessToken}
 	case "discord":
 		command = []string{"node", "/app/openclaw.mjs", "channels", "add",
 			"--channel", "discord",
-			"--token", token}
+			"--token", token,
+			"--gateway-token", accessToken}
 	case "slack":
 		if botToken == "" || appToken == "" {
 			return fmt.Errorf("slack requires both bot_token and app_token")
@@ -35,16 +38,19 @@ func AddChannelToBot(ctx context.Context, botID, channel, token, botToken, appTo
 		command = []string{"node", "/app/openclaw.mjs", "channels", "add",
 			"--channel", "slack",
 			"--bot-token", botToken,
-			"--app-token", appToken}
+			"--app-token", appToken,
+			"--gateway-token", accessToken}
 	case "whatsapp":
 		// WhatsApp uses QR code auth, just initialize the channel
 		command = []string{"node", "/app/openclaw.mjs", "channels", "add",
-			"--channel", "whatsapp"}
+			"--channel", "whatsapp",
+			"--gateway-token", accessToken}
 	default:
 		// Generic channel with token
 		command = []string{"node", "/app/openclaw.mjs", "channels", "add",
 			"--channel", channel,
-			"--token", token}
+			"--token", token,
+			"--gateway-token", accessToken}
 	}
 
 	_, err = ExecInPod(ctx, namespace, podName, "openclaw", command)
@@ -56,7 +62,7 @@ func AddChannelToBot(ctx context.Context, botID, channel, token, botToken, appTo
 }
 
 // ListBotChannels lists all configured channels for a bot
-func ListBotChannels(ctx context.Context, botID string) ([]map[string]string, error) {
+func ListBotChannels(ctx context.Context, botID, accessToken string) ([]map[string]string, error) {
 	namespace := GetNamespace()
 
 	podName, err := waitForPodReady(ctx, botID, 30)
@@ -65,7 +71,7 @@ func ListBotChannels(ctx context.Context, botID string) ([]map[string]string, er
 	}
 
 	output, err := ExecInPod(ctx, namespace, podName, "openclaw",
-		[]string{"node", "/app/openclaw.mjs", "channels", "list"})
+		[]string{"node", "/app/openclaw.mjs", "channels", "list", "--token", accessToken})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list channels: %w", err)
 	}
@@ -76,7 +82,7 @@ func ListBotChannels(ctx context.Context, botID string) ([]map[string]string, er
 }
 
 // RemoveChannelFromBot removes an IM channel from a bot
-func RemoveChannelFromBot(ctx context.Context, botID, channel string) error {
+func RemoveChannelFromBot(ctx context.Context, botID, accessToken, channel string) error {
 	namespace := GetNamespace()
 
 	podName, err := waitForPodReady(ctx, botID, 30)
@@ -85,7 +91,7 @@ func RemoveChannelFromBot(ctx context.Context, botID, channel string) error {
 	}
 
 	_, err = ExecInPod(ctx, namespace, podName, "openclaw",
-		[]string{"node", "/app/openclaw.mjs", "channels", "remove", "--channel", channel})
+		[]string{"node", "/app/openclaw.mjs", "channels", "remove", "--channel", channel, "--token", accessToken})
 	if err != nil {
 		return fmt.Errorf("failed to remove channel: %w", err)
 	}

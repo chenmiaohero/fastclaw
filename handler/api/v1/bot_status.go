@@ -47,6 +47,17 @@ func GetBotStatus(c echo.Context) error {
 			response.Ready = false
 		} else {
 			response.Ready = ready
+			// Sync status: if K8s deployment doesn't exist, update DB to stopped
+			if !ready {
+				exists, _ := k8s.DeploymentExists(ctx, bot.ID)
+				if !exists {
+					bot.Status = model.BotStatusStopped
+					bot.Endpoint = ""
+					model.UpdateBot(bot)
+					response.Status = model.BotStatusStopped
+					response.Endpoint = ""
+				}
+			}
 		}
 	}
 

@@ -2,9 +2,11 @@ package proxy
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/gorilla/websocket"
@@ -14,6 +16,12 @@ import (
 	"github.com/workany-ai/clawork/util"
 	"gorm.io/gorm"
 )
+
+// isUUID checks if a string is in UUID format
+func isUUID(s string) bool {
+	uuidRegex := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+	return uuidRegex.MatchString(strings.ToLower(s))
+}
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
@@ -29,21 +37,19 @@ func ProxyToBot(c echo.Context) error {
 		return util.BadRequest(c, "bot_id or slug is required")
 	}
 
-	// Get bot info - try by ID first, then by slug
-	bot, err := model.GetBotByID(botIdentifier)
+	// Get bot info - determine if it's an ID (UUID format) or slug (short string)
+	var bot *model.Bot
+	var err error
+	if isUUID(botIdentifier) {
+		bot, err = model.GetBotByID(botIdentifier)
+	} else {
+		bot, err = model.GetBotBySlug(botIdentifier)
+	}
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			// Try by slug
-			bot, err = model.GetBotBySlug(botIdentifier)
-			if err != nil {
-				if err == gorm.ErrRecordNotFound {
-					return util.NotFound(c, "bot not found")
-				}
-				return util.InternalError(c, "failed to get bot")
-			}
-		} else {
-			return util.InternalError(c, "failed to get bot")
+			return util.NotFound(c, "bot not found")
 		}
+		return util.InternalError(c, "failed to get bot")
 	}
 
 	// Token is no longer auto-injected - user must provide correct token in URL
@@ -89,6 +95,15 @@ func ProxyToBot(c echo.Context) error {
 		req.Host = targetHost
 		req.URL.Path = remainingPath
 		req.URL.RawQuery = c.QueryString()
+
+		// Forward real client IP
+		clientIP := c.RealIP()
+		req.Header.Set("X-Real-IP", clientIP)
+		if xff := req.Header.Get("X-Forwarded-For"); xff != "" {
+			req.Header.Set("X-Forwarded-For", xff+", "+clientIP)
+		} else {
+			req.Header.Set("X-Forwarded-For", clientIP)
+		}
 	}
 
 	proxy.ServeHTTP(c.Response(), c.Request())
@@ -117,11 +132,27 @@ func proxyWebSocket(c echo.Context, targetHost, path string) error {
 
 	// Forward relevant headers to backend
 	requestHeader := http.Header{}
-	if origin := c.Request().Header.Get("Origin"); origin != "" {
-		requestHeader.Set("Origin", origin)
-	}
+	// Set Origin to the target host to pass OpenClaw's origin check
+	// OpenClaw doesn't support wildcard "*" in allowedOrigins
+	requestHeader.Set("Origin", fmt.Sprintf("http://%s", targetHost))
 	if protocol := c.Request().Header.Get("Sec-WebSocket-Protocol"); protocol != "" {
 		requestHeader.Set("Sec-WebSocket-Protocol", protocol)
+	}
+	// Forward Authorization header for password auth
+	if auth := c.Request().Header.Get("Authorization"); auth != "" {
+		requestHeader.Set("Authorization", auth)
+	}
+	// Forward Cookie header (OpenClaw may use cookie for session)
+	if cookie := c.Request().Header.Get("Cookie"); cookie != "" {
+		requestHeader.Set("Cookie", cookie)
+	}
+	// Forward real client IP
+	clientIP := c.RealIP()
+	requestHeader.Set("X-Real-IP", clientIP)
+	if xff := c.Request().Header.Get("X-Forwarded-For"); xff != "" {
+		requestHeader.Set("X-Forwarded-For", xff+", "+clientIP)
+	} else {
+		requestHeader.Set("X-Forwarded-For", clientIP)
 	}
 
 	backendConn, _, err := websocket.DefaultDialer.Dial(backendURL.String(), requestHeader)
