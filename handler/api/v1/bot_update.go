@@ -105,8 +105,8 @@ func UpdateBot(c echo.Context) error {
 				}
 			}
 
-			// Write config file to pod
-			if err := k8s.WriteConfigToBot(ctx, bot.ID, k8sConfig); err != nil {
+			// Write config file to pod (force set default model on update)
+			if err := k8s.WriteConfigToBot(ctx, bot.ID, k8sConfig, true); err != nil {
 				c.Logger().Errorf("failed to sync config to bot: %v", err)
 			}
 		}()

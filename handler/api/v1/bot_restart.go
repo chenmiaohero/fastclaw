@@ -52,7 +52,8 @@ func RestartBot(c echo.Context) error {
 	// Config is required for password auth
 	if k8sConfig.Password != "" {
 		go func() {
-			if err := k8s.WriteConfigToBot(context.Background(), bot.ID, k8sConfig); err != nil {
+			// On restart, only set default model if user hasn't configured one
+			if err := k8s.WriteConfigToBot(context.Background(), bot.ID, k8sConfig, false); err != nil {
 				c.Logger().Errorf("failed to write config to bot: %v", err)
 			}
 		}()

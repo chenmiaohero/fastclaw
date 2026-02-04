@@ -9,7 +9,8 @@ import (
 )
 
 // WriteConfigToBot writes the openclaw.json config file to the bot's pod
-func WriteConfigToBot(ctx context.Context, botID string, config *BotConfig) error {
+// If forceSetDefaultModel is true, always set agents.defaults.model.primary
+func WriteConfigToBot(ctx context.Context, botID string, config *BotConfig, forceSetDefaultModel bool) error {
 	if config == nil {
 		return nil
 	}
@@ -22,11 +23,16 @@ func WriteConfigToBot(ctx context.Context, botID string, config *BotConfig) erro
 		return fmt.Errorf("failed to wait for pod ready: %w", err)
 	}
 
-	// Check if user has already configured a default model
-	hasDefaultModel := checkHasDefaultModel(ctx, namespace, podName)
+	// Determine whether to set default model
+	setDefaultModel := forceSetDefaultModel
+	if !forceSetDefaultModel {
+		// Check if user has already configured a default model
+		hasDefaultModel := checkHasDefaultModel(ctx, namespace, podName)
+		setDefaultModel = !hasDefaultModel
+	}
 
 	// Build openclaw.json content
-	configJSON := buildOpenClawConfig(config, !hasDefaultModel)
+	configJSON := buildOpenClawConfig(config, setDefaultModel)
 
 	// Write config file to OpenClaw's config directory
 	// Note: OpenClaw container uses HOME=/home/node, so ~/.openclaw = /home/node/.openclaw
