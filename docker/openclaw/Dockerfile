@@ -5,17 +5,6 @@ FROM 1panel/openclaw:latest
 
 USER root
 
-# Install feishu plugin to /app/extensions/
-# Using npm pack to download and extract with correct directory structure
-RUN cd /tmp && \
-    npm pack @m1heng-clawd/feishu && \
-    mkdir -p /app/extensions/feishu && \
-    tar -xzf m1heng-clawd-feishu-*.tgz -C /app/extensions/feishu --strip-components=1 && \
-    cd /app/extensions/feishu && \
-    npm install --omit=dev && \
-    rm -f /tmp/m1heng-clawd-feishu-*.tgz && \
-    chown -R node:node /app/extensions/feishu
-
 # Add more plugins here as needed:
 # RUN cd /tmp && \
 #     npm pack @some-scope/another-plugin && \
