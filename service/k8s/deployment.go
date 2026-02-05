@@ -29,15 +29,51 @@ func GetServiceName(botID string) string {
 	return fmt.Sprintf("oc-%s-svc", getShortID(botID))
 }
 
+// ModelProviderConfig holds a single model provider configuration
+type ModelProviderConfig struct {
+	Name       string             // Provider name (anthropic, openai, minimax)
+	BaseURL    string             // Base URL for the provider API
+	APIKey     string             // API key
+	Auth       string             // Auth mode: "api-key" (default), "bearer", etc.
+	AuthHeader bool               // Whether to send API key in Authorization header
+	API        string             // API format: "anthropic-messages" (default), "openai-completions", etc.
+	Models     []ModelConfigEntry // Model configurations
+}
+
+// ModelConfigEntry holds a single model configuration
+type ModelConfigEntry struct {
+	ID            string
+	Name          string
+	Reasoning     bool
+	Input         []string
+	ContextWindow int
+	MaxTokens     int
+}
+
+// AgentDefaultsConfig holds agent default configuration
+type AgentDefaultsConfig struct {
+	PrimaryModel string // e.g., "anthropic/claude-sonnet-4-20250514"
+}
+
 // BotConfig holds the configuration for a bot
 type BotConfig struct {
+	// Legacy single provider fields (kept for backward compatibility)
 	Provider string // Provider key name in openclaw config (e.g., "anthropic", "minimax")
 	Model    string
 	APIKey   string
 	BaseURL  string // For MiniMax or other Anthropic-compatible APIs
 	Auth     string // Auth mode: "api-key" (default), "bearer", etc.
 	API      string // API format: "anthropic-messages" (default), "openai-completions", etc.
-	Password string // Gateway authentication password
+
+	// Access token for CLI commands
+	AccessToken string
+
+	// Multi-provider support
+	Providers     []ModelProviderConfig
+	AgentDefaults *AgentDefaultsConfig
+
+	// Channels configuration (telegram, slack, discord, etc.)
+	Channels map[string]interface{}
 }
 
 func CreateDeployment(ctx context.Context, botID, userID, accessToken string, config *BotConfig) error {
@@ -117,8 +153,8 @@ func CreateDeployment(ctx context.Context, botID, userID, accessToken string, co
 					}(),
 					InitContainers: []corev1.Container{
 						{
-							Name:  "init-permissions",
-							Image: "alpine:3.19",
+							Name:    "init-permissions",
+							Image:   "alpine:3.19",
 							Command: []string{"sh", "-c", "chown -R 1000:1000 /data && chmod -R 755 /data"},
 							VolumeMounts: []corev1.VolumeMount{
 								{
@@ -150,9 +186,9 @@ func CreateDeployment(ctx context.Context, botID, userID, accessToken string, co
 									Protocol:      corev1.ProtocolTCP,
 								},
 							},
-							// Write full config file before starting gateway (password auth via config file)
+							// Write full config file before starting gateway
 							Command: func() []string {
-								if config != nil && config.Password != "" {
+								if config != nil && config.AccessToken != "" {
 									// Generate full config JSON (including models) and write before starting gateway
 									configJSON := buildOpenClawConfig(config, true)
 									return []string{"sh", "-c", fmt.Sprintf(`cat > /home/node/.openclaw/openclaw.json << 'EOFCONFIG'
@@ -288,6 +324,49 @@ func GetDeploymentStatus(ctx context.Context, botID string) (bool, error) {
 	return deployment.Status.ReadyReplicas > 0, nil
 }
 
+// DeploymentStatusInfo holds detailed deployment status
+type DeploymentStatusInfo struct {
+	Status          string `json:"status"`           // ready, updating, starting, not_ready, not_found
+	ReadyReplicas   int32  `json:"ready_replicas"`   // Number of ready pods
+	DesiredReplicas int32  `json:"desired_replicas"` // Desired number of pods
+	UpdatedReplicas int32  `json:"updated_replicas"` // Number of pods with updated spec
+}
+
+// GetDeploymentStatusInfo returns detailed deployment status
+func GetDeploymentStatusInfo(ctx context.Context, botID string) (*DeploymentStatusInfo, error) {
+	client := GetClient()
+	namespace := GetNamespace()
+	deploymentName := GetDeploymentName(botID)
+
+	deployment, err := client.AppsV1().Deployments(namespace).Get(ctx, deploymentName, metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return &DeploymentStatusInfo{Status: "not_found"}, nil
+		}
+		return nil, fmt.Errorf("failed to get deployment: %w", err)
+	}
+
+	info := &DeploymentStatusInfo{
+		ReadyReplicas:   deployment.Status.ReadyReplicas,
+		DesiredReplicas: *deployment.Spec.Replicas,
+		UpdatedReplicas: deployment.Status.UpdatedReplicas,
+	}
+
+	// Determine status
+	if deployment.Status.ReadyReplicas == 0 {
+		info.Status = "starting"
+	} else if deployment.Status.UpdatedReplicas < *deployment.Spec.Replicas {
+		// Rolling update in progress
+		info.Status = "updating"
+	} else if deployment.Status.ReadyReplicas < *deployment.Spec.Replicas {
+		info.Status = "not_ready"
+	} else {
+		info.Status = "ready"
+	}
+
+	return info, nil
+}
+
 // DeploymentExists checks if a deployment exists for the given bot
 func DeploymentExists(ctx context.Context, botID string) (bool, error) {
 	client := GetClient()
@@ -357,7 +436,7 @@ func UpdateDeploymentConfig(ctx context.Context, botID, accessToken string, conf
 		container := &deployment.Spec.Template.Spec.Containers[i]
 		if container.Name == "openclaw" {
 			// Update command - write full config (including models) before starting gateway
-			if config != nil && config.Password != "" {
+			if config != nil && config.AccessToken != "" {
 				// Use full config to preserve models section
 				configJSON := buildOpenClawConfig(config, true)
 				container.Command = []string{"sh", "-c", fmt.Sprintf(`cat > /home/node/.openclaw/openclaw.json << 'EOFCONFIG'
@@ -402,4 +481,3 @@ node /app/openclaw.mjs gateway --port %d --bind lan --allow-unconfigured --dev`,
 
 	return nil
 }
-

@@ -101,10 +101,27 @@ func startServer() {
 		api.GET("/bots/:id/channels", v1.ListChannels)
 		api.DELETE("/bots/:id/channels/:channel", v1.RemoveChannel)
 
+		// Channel pairing management
+		api.GET("/bots/:id/channels/:channel/pairing", v1.ListChannelPairingRequests)
+		api.POST("/bots/:id/channels/:channel/pairing/approve", v1.ApproveChannelPairing)
+		api.POST("/bots/:id/channels/:channel/pairing/revoke", v1.RevokeChannelPairing)
+		api.GET("/bots/:id/channels/:channel/pairing/users", v1.GetChannelPairedUsers)
+
 		// Device pairing management
 		api.GET("/bots/:id/devices", v1.ListDevices)
 		api.POST("/bots/:id/devices/:request_id/approve", v1.ApproveDevice)
 		api.DELETE("/bots/:id/devices/:device_id", v1.RevokeDevice)
+
+		// Model providers management
+		api.GET("/bots/:id/config/models", v1.ListModelProviders)
+		api.POST("/bots/:id/config/models", v1.AddModelProvider)
+		api.GET("/bots/:id/config/models/:provider", v1.GetModelProvider)
+		api.PUT("/bots/:id/config/models/:provider", v1.UpdateModelProvider)
+		api.DELETE("/bots/:id/config/models/:provider", v1.DeleteModelProvider)
+
+		// Agent defaults management
+		api.GET("/bots/:id/config/defaults", v1.GetAgentDefaults)
+		api.PUT("/bots/:id/config/defaults", v1.SetAgentDefaults)
 	}
 
 	// Admin API routes: /bot/api/v1/admin/* (requires admin token)

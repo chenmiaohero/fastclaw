@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -10,6 +11,7 @@ import (
 
 // WriteConfigToBot writes the openclaw.json config file to the bot's pod
 // If forceSetDefaultModel is true, always set agents.defaults.model.primary
+// This function MERGES with existing config to preserve channels and other settings
 func WriteConfigToBot(ctx context.Context, botID string, config *BotConfig, forceSetDefaultModel bool) error {
 	if config == nil {
 		return nil
@@ -23,30 +25,215 @@ func WriteConfigToBot(ctx context.Context, botID string, config *BotConfig, forc
 		return fmt.Errorf("failed to wait for pod ready: %w", err)
 	}
 
+	// Read existing config to preserve channels and other settings
+	existingConfig, err := readExistingConfig(ctx, namespace, podName)
+	if err != nil {
+		// If can't read, start with empty config
+		existingConfig = make(map[string]interface{})
+	}
+
 	// Determine whether to set default model
 	setDefaultModel := forceSetDefaultModel
 	if !forceSetDefaultModel {
 		// Check if user has already configured a default model
-		hasDefaultModel := checkHasDefaultModel(ctx, namespace, podName)
-		setDefaultModel = !hasDefaultModel
+		if agents, ok := existingConfig["agents"].(map[string]interface{}); ok {
+			if defaults, ok := agents["defaults"].(map[string]interface{}); ok {
+				if model, ok := defaults["model"].(map[string]interface{}); ok {
+					if _, ok := model["primary"]; ok {
+						setDefaultModel = false
+					}
+				}
+			}
+		}
 	}
 
-	// Build openclaw.json content
-	configJSON := buildOpenClawConfig(config, setDefaultModel)
+	// Merge new config into existing config
+	mergedConfig := mergeConfigForModels(existingConfig, config, setDefaultModel)
+
+	// Marshal to JSON
+	configJSON, err := json.MarshalIndent(mergedConfig, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
 
 	// Write config file to OpenClaw's config directory
-	// Note: OpenClaw container uses HOME=/home/node, so ~/.openclaw = /home/node/.openclaw
-	command := []string{"sh", "-c", fmt.Sprintf("cat > /home/node/.openclaw/openclaw.json << 'EOFCONFIG'\n%s\nEOFCONFIG", configJSON)}
+	command := []string{"sh", "-c", fmt.Sprintf("cat > /home/node/.openclaw/openclaw.json << 'EOFCONFIG'\n%s\nEOFCONFIG", string(configJSON))}
 
 	_, err = ExecInPod(ctx, namespace, podName, "openclaw", command)
 	if err != nil {
 		return fmt.Errorf("failed to write config: %w", err)
 	}
 
-	// OpenClaw will auto-detect config changes and hot-reload (sends SIGUSR1 to restart gateway)
-	// API only configures fallback provider, sets default model only if user hasn't configured one
-
 	return nil
+}
+
+// readExistingConfig reads the existing openclaw.json config from the pod
+func readExistingConfig(ctx context.Context, namespace, podName string) (map[string]interface{}, error) {
+	output, err := ExecInPod(ctx, namespace, podName, "openclaw",
+		[]string{"sh", "-c", "cat /home/node/.openclaw/openclaw.json 2>/dev/null || echo '{}'"})
+	if err != nil {
+		return nil, err
+	}
+
+	var config map[string]interface{}
+	if err := json.Unmarshal([]byte(output), &config); err != nil {
+		return nil, err
+	}
+
+	return config, nil
+}
+
+// mergeConfigForModels merges model/gateway config into existing config, preserving channels
+func mergeConfigForModels(existing map[string]interface{}, config *BotConfig, setDefaultModel bool) map[string]interface{} {
+	// Build gateway config
+	gatewayPort := getGatewayPort()
+	trustedProxies := viper.GetStringSlice("openclaw.trusted_proxies")
+	if len(trustedProxies) == 0 {
+		trustedProxies = []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.0/8"}
+	}
+
+	// Build auth config - preserve existing gateway.auth if present, otherwise use token auth
+	var authConfig map[string]interface{}
+	if existingGateway, ok := existing["gateway"].(map[string]interface{}); ok {
+		if existingAuth, ok := existingGateway["auth"].(map[string]interface{}); ok {
+			// Preserve existing auth config
+			authConfig = existingAuth
+		}
+	}
+	// If no existing auth or access token provided, use token auth
+	if authConfig == nil {
+		authConfig = map[string]interface{}{
+			"mode":  "token",
+			"token": config.AccessToken,
+		}
+	}
+
+	gateway := map[string]interface{}{
+		"port":           gatewayPort,
+		"mode":           "local",
+		"bind":           "lan",
+		"auth":           authConfig,
+		"tailscale": map[string]interface{}{
+			"mode":        "off",
+			"resetOnExit": false,
+		},
+		"trustedProxies": trustedProxies,
+	}
+	existing["gateway"] = gateway
+
+	// Build models config
+	providers := buildProvidersMap(config)
+	existing["models"] = map[string]interface{}{
+		"mode":      "merge",
+		"providers": providers,
+	}
+
+	// Set default model if needed
+	if setDefaultModel {
+		defaultModel := getDefaultModelFromConfig(config)
+		if config.AgentDefaults != nil && config.AgentDefaults.PrimaryModel != "" {
+			defaultModel = config.AgentDefaults.PrimaryModel
+		}
+		if defaultModel != "" {
+			existing["agents"] = map[string]interface{}{
+				"defaults": map[string]interface{}{
+					"model": map[string]interface{}{
+						"primary": defaultModel,
+					},
+				},
+			}
+		}
+	}
+
+	// Merge channels from config if provided
+	// This allows setting channels during bot creation or update
+	if len(config.Channels) > 0 {
+		existingChannels, _ := existing["channels"].(map[string]interface{})
+		if existingChannels == nil {
+			existingChannels = make(map[string]interface{})
+		}
+		// Merge each channel from config into existing channels
+		for channelName, channelConfig := range config.Channels {
+			existingChannels[channelName] = channelConfig
+		}
+		existing["channels"] = existingChannels
+	}
+	// If no channels in config, preserve existing channels (don't touch them)
+
+	return existing
+}
+
+// buildProvidersMap builds the providers map from BotConfig
+func buildProvidersMap(config *BotConfig) map[string]interface{} {
+	providers := make(map[string]interface{})
+
+	if len(config.Providers) > 0 {
+		for _, p := range config.Providers {
+			providerObj := map[string]interface{}{
+				"baseUrl":    p.BaseURL,
+				"apiKey":     p.APIKey,
+				"auth":       getAuthOrDefault(p.Auth),
+				"authHeader": p.AuthHeader,
+				"api":        getAPIOrDefault(p.API, p.Name),
+			}
+			if len(p.Models) > 0 {
+				models := make([]map[string]interface{}, len(p.Models))
+				for i, m := range p.Models {
+					modelObj := map[string]interface{}{
+						"id":            m.ID,
+						"name":          m.Name,
+						"reasoning":     m.Reasoning,
+						"contextWindow": m.ContextWindow,
+						"maxTokens":     m.MaxTokens,
+					}
+					if len(m.Input) > 0 {
+						modelObj["input"] = m.Input
+					} else {
+						modelObj["input"] = []string{"text"}
+					}
+					if m.Name == "" {
+						modelObj["name"] = m.ID
+					}
+					if m.ContextWindow == 0 {
+						modelObj["contextWindow"] = 200000
+					}
+					if m.MaxTokens == 0 {
+						modelObj["maxTokens"] = 8192
+					}
+					models[i] = modelObj
+				}
+				providerObj["models"] = models
+			}
+			providers[p.Name] = providerObj
+		}
+	} else {
+		// Legacy single provider
+		baseURL := config.BaseURL
+		if baseURL == "" {
+			baseURL = "https://api.anthropic.com"
+		}
+		model := getDefaultModel(config.Model)
+		providerName := getProviderName(config.Provider, baseURL)
+
+		providers[providerName] = map[string]interface{}{
+			"baseUrl": baseURL,
+			"apiKey":  config.APIKey,
+			"auth":    getAuthOrDefault(config.Auth),
+			"api":     getAPIOrDefault(config.API, providerName),
+			"models": []map[string]interface{}{
+				{
+					"id":            model,
+					"name":          model,
+					"reasoning":     false,
+					"input":         []string{"text"},
+					"contextWindow": 200000,
+					"maxTokens":     8192,
+				},
+			},
+		}
+	}
+
+	return providers
 }
 
 // checkHasDefaultModel checks if user has already configured a default model
@@ -128,25 +315,7 @@ func getGatewayPort() int {
 // buildOpenClawConfig builds the openclaw.json configuration content
 // setDefaultModel: if true, also sets agents.defaults.model.primary (for first-time setup)
 func buildOpenClawConfig(config *BotConfig, setDefaultModel bool) string {
-	baseURL := config.BaseURL
-	if baseURL == "" {
-		baseURL = "https://api.anthropic.com"
-	}
-	model := getDefaultModel(config.Model)
-	providerName := getProviderName(config.Provider, baseURL)
-	fullModelID := fmt.Sprintf("%s/%s", providerName, model)
-
-	// Default auth and api values for model provider
-	auth := config.Auth
-	if auth == "" {
-		auth = "api-key"
-	}
-	api := config.API
-	if api == "" {
-		api = "anthropic-messages"
-	}
-
-	// Build gateway section with password auth
+	// Build gateway section with password or token auth
 	gatewayPort := getGatewayPort()
 	trustedProxies := getTrustedProxies()
 	allowedOrigins := getAllowedOrigins()
@@ -160,21 +329,44 @@ func buildOpenClawConfig(config *BotConfig, setDefaultModel bool) string {
 		optionalParts += fmt.Sprintf(",\n    \"controlUi\": {\n      \"allowedOrigins\": %s\n    }", allowedOrigins)
 	}
 
+	// Build auth section using token auth with AccessToken
+	authSection := fmt.Sprintf(`"auth": {
+      "mode": "token",
+      "token": "%s"
+    }`, config.AccessToken)
+
 	gatewaySection := fmt.Sprintf(`"gateway": {
     "port": %d,
     "mode": "local",
     "bind": "lan",
-    "auth": {
-      "mode": "password",
-      "password": "%s"
-    },
+    %s,
     "tailscale": {
       "mode": "off",
       "resetOnExit": false
     }%s
-  }`, gatewayPort, config.Password, optionalParts)
+  }`, gatewayPort, authSection, optionalParts)
 
-	if setDefaultModel {
+	// Build providers section
+	providersJSON := buildProvidersJSON(config)
+
+	// Build channels section if present
+	channelsSection := ""
+	if len(config.Channels) > 0 {
+		channelsJSON, err := json.MarshalIndent(config.Channels, "  ", "  ")
+		if err == nil {
+			channelsSection = fmt.Sprintf(",\n  \"channels\": %s", string(channelsJSON))
+		}
+	}
+
+	// Determine default model
+	defaultModel := getDefaultModelFromConfig(config)
+
+	// Check if we have AgentDefaults set explicitly
+	if config.AgentDefaults != nil && config.AgentDefaults.PrimaryModel != "" {
+		defaultModel = config.AgentDefaults.PrimaryModel
+	}
+
+	if setDefaultModel && defaultModel != "" {
 		// Include agents.defaults to set fallback model for first-time users
 		return fmt.Sprintf(`{
   %s,
@@ -187,34 +379,80 @@ func buildOpenClawConfig(config *BotConfig, setDefaultModel bool) string {
   },
   "models": {
     "mode": "merge",
-    "providers": {
-      "%s": {
-        "baseUrl": "%s",
-        "apiKey": "%s",
-        "auth": "%s",
-        "api": "%s",
-        "models": [
-          {
-            "id": "%s",
-            "name": "%s",
-            "reasoning": false,
-            "input": ["text"],
-            "contextWindow": 200000,
-            "maxTokens": 8192
-          }
-        ]
-      }
-    }
-  }
-}`, gatewaySection, fullModelID, providerName, baseURL, config.APIKey, auth, api, model, model)
+    "providers": %s
+  }%s
+}`, gatewaySection, defaultModel, providersJSON, channelsSection)
 	}
 
-	// Only add provider, don't change user's default model
+	// Only add providers, don't change user's default model
 	return fmt.Sprintf(`{
   %s,
   "models": {
     "mode": "merge",
-    "providers": {
+    "providers": %s
+  }%s
+}`, gatewaySection, providersJSON, channelsSection)
+}
+
+// buildProvidersJSON builds the providers JSON object from BotConfig
+func buildProvidersJSON(config *BotConfig) string {
+	// If we have multiple providers configured, use them
+	if len(config.Providers) > 0 {
+		providers := make(map[string]interface{})
+		for _, p := range config.Providers {
+			providerObj := map[string]interface{}{
+				"baseUrl":    p.BaseURL,
+				"apiKey":     p.APIKey,
+				"auth":       getAuthOrDefault(p.Auth),
+				"authHeader": p.AuthHeader,
+				"api":        getAPIOrDefault(p.API, p.Name),
+			}
+			if len(p.Models) > 0 {
+				models := make([]map[string]interface{}, len(p.Models))
+				for i, m := range p.Models {
+					modelObj := map[string]interface{}{
+						"id":            m.ID,
+						"name":          m.Name,
+						"reasoning":     m.Reasoning,
+						"contextWindow": m.ContextWindow,
+						"maxTokens":     m.MaxTokens,
+					}
+					if len(m.Input) > 0 {
+						modelObj["input"] = m.Input
+					} else {
+						modelObj["input"] = []string{"text"}
+					}
+					if m.Name == "" {
+						modelObj["name"] = m.ID
+					}
+					if m.ContextWindow == 0 {
+						modelObj["contextWindow"] = 200000
+					}
+					if m.MaxTokens == 0 {
+						modelObj["maxTokens"] = 8192
+					}
+					models[i] = modelObj
+				}
+				providerObj["models"] = models
+			}
+			providers[p.Name] = providerObj
+		}
+		jsonBytes, _ := json.MarshalIndent(providers, "    ", "  ")
+		return string(jsonBytes)
+	}
+
+	// Fallback to legacy single provider
+	baseURL := config.BaseURL
+	if baseURL == "" {
+		baseURL = "https://api.anthropic.com"
+	}
+	model := getDefaultModel(config.Model)
+	providerName := getProviderName(config.Provider, baseURL)
+
+	auth := getAuthOrDefault(config.Auth)
+	api := getAPIOrDefault(config.API, providerName)
+
+	return fmt.Sprintf(`{
       "%s": {
         "baseUrl": "%s",
         "apiKey": "%s",
@@ -231,9 +469,52 @@ func buildOpenClawConfig(config *BotConfig, setDefaultModel bool) string {
           }
         ]
       }
-    }
-  }
-}`, gatewaySection, providerName, baseURL, config.APIKey, auth, api, model, model)
+    }`, providerName, baseURL, config.APIKey, auth, api, model, model)
+}
+
+// getDefaultModelFromConfig returns the default model ID from config
+func getDefaultModelFromConfig(config *BotConfig) string {
+	// Check AgentDefaults first
+	if config.AgentDefaults != nil && config.AgentDefaults.PrimaryModel != "" {
+		return config.AgentDefaults.PrimaryModel
+	}
+
+	// If we have providers, use the first provider's first model
+	if len(config.Providers) > 0 {
+		p := config.Providers[0]
+		if len(p.Models) > 0 {
+			return fmt.Sprintf("%s/%s", p.Name, p.Models[0].ID)
+		}
+	}
+
+	// Fallback to legacy fields
+	if config.Model != "" {
+		providerName := getProviderName(config.Provider, config.BaseURL)
+		return fmt.Sprintf("%s/%s", providerName, config.Model)
+	}
+
+	// Default
+	return "anthropic/claude-sonnet-4-20250514"
+}
+
+// getAuthOrDefault returns the auth value or default "api-key"
+func getAuthOrDefault(auth string) string {
+	if auth == "" {
+		return "api-key"
+	}
+	return auth
+}
+
+// getAPIOrDefault returns the API value or default based on provider
+func getAPIOrDefault(api, provider string) string {
+	if api != "" {
+		return api
+	}
+	// Default based on provider
+	if provider == "openai" {
+		return "openai-completions"
+	}
+	return "anthropic-messages"
 }
 
 // BuildGatewayConfig builds the minimal gateway config for initial startup
@@ -255,19 +536,22 @@ func BuildGatewayConfig(config *BotConfig, port int32) string {
     }`, allowedOrigins)
 	}
 
+	// Build auth section using token auth with AccessToken
+	authSection := fmt.Sprintf(`"auth": {
+      "mode": "token",
+      "token": "%s"
+    }`, config.AccessToken)
+
 	return fmt.Sprintf(`{
   "gateway": {
     "port": %d,
     "mode": "local",
     "bind": "lan",
-    "auth": {
-      "mode": "password",
-      "password": "%s"
-    },
+    %s,
     "tailscale": {
       "mode": "off",
       "resetOnExit": false
     }%s
   }
-}`, port, config.Password, optionalParts)
+}`, port, authSection, optionalParts)
 }

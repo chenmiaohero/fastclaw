@@ -25,6 +25,7 @@ type DeviceInfo struct {
 	IP         string `json:"ip,omitempty"`
 	Age        string `json:"age,omitempty"`
 	Revoked    bool   `json:"revoked,omitempty"`
+	Connected  bool   `json:"connected,omitempty"`
 	Status     string `json:"status"` // pending, paired, or revoked
 }
 
@@ -80,13 +81,15 @@ func formatAge(ms int64) string {
 // ListDevices returns the list of pending and paired devices for a bot
 // Query params:
 //   - status: filter by status ("pending" or "paired"), default returns all
+//   - client_mode: filter by client mode ("web", "cli", "desktop", etc.), default returns all
 func ListDevices(c echo.Context) error {
 	id := c.Param("id")
 	if id == "" {
 		return util.BadRequest(c, "id is required")
 	}
 
-	statusFilter := c.QueryParam("status") // "pending", "paired", or empty for all
+	statusFilter := c.QueryParam("status")           // "pending", "paired", or empty for all
+	clientModeFilter := c.QueryParam("client_mode")  // "web", "cli", "desktop", etc.
 
 	bot, err := model.GetBotByID(id)
 	if err != nil {
@@ -102,27 +105,135 @@ func ListDevices(c echo.Context) error {
 
 	ctx := context.Background()
 
+	// Try Gateway WebSocket API first (faster)
+	devices, err := listDevicesViaGateway(ctx, bot)
+	if err != nil {
+		// Fallback to CLI method
+		c.Logger().Warnf("Gateway API failed (%v), falling back to CLI", err)
+		devices, err = listDevicesViaCLI(ctx, bot)
+		if err != nil {
+			c.Logger().Errorf("CLI fallback also failed: %v", err)
+			return util.InternalError(c, "failed to list devices: "+err.Error())
+		}
+		c.Logger().Info("CLI fallback succeeded")
+	}
+
+	// Ensure devices is never nil (return empty array instead of null)
+	if devices == nil {
+		devices = []DeviceInfo{}
+	}
+
+	// Filter by status if specified
+	if statusFilter != "" {
+		filtered := []DeviceInfo{}
+		for _, d := range devices {
+			if d.Status == statusFilter {
+				filtered = append(filtered, d)
+			}
+		}
+		devices = filtered
+	}
+
+	// Filter by client_mode if specified
+	if clientModeFilter != "" {
+		filtered := []DeviceInfo{}
+		for _, d := range devices {
+			if d.ClientMode == clientModeFilter {
+				filtered = append(filtered, d)
+			}
+		}
+		devices = filtered
+	}
+
+	return util.Success(c, map[string]interface{}{
+		"bot_id":  bot.ID,
+		"devices": devices,
+	})
+}
+
+// listDevicesViaGateway uses the Gateway WebSocket API to list devices (fast)
+func listDevicesViaGateway(ctx context.Context, bot *model.Bot) ([]DeviceInfo, error) {
+	result, err := k8s.ListBotDevicesViaGateway(ctx, bot.ID, bot.AccessToken)
+	if err != nil {
+		return nil, err
+	}
+
+	devices := []DeviceInfo{}
+
+	// Convert pending requests
+	for _, d := range result.Pending {
+		devices = append(devices, DeviceInfo{
+			RequestID:  d.RequestID,
+			DeviceID:   d.DeviceID,
+			Role:       d.Role,
+			Platform:   d.Platform,
+			ClientID:   d.ClientID,
+			ClientMode: d.ClientMode,
+			IP:         d.IP,
+			Age:        formatAge(d.Ts),
+			Status:     "pending",
+		})
+	}
+
+	// Convert paired nodes
+	for _, d := range result.Paired {
+		// Check if device is revoked (all tokens revoked)
+		revoked := false
+		if len(d.Tokens) > 0 {
+			allRevoked := true
+			for _, t := range d.Tokens {
+				if t.RevokedAtMs == 0 {
+					allRevoked = false
+					break
+				}
+			}
+			revoked = allRevoked
+		}
+
+		status := "paired"
+		if revoked {
+			status = "revoked"
+		}
+
+		devices = append(devices, DeviceInfo{
+			DeviceID:   d.DeviceID,
+			Role:       d.Role,
+			Platform:   d.Platform,
+			ClientID:   d.ClientID,
+			ClientMode: d.ClientMode,
+			Age:        formatAge(d.ApprovedAtMs),
+			Revoked:    revoked,
+			Connected:  d.Connected,
+			Status:     status,
+		})
+	}
+
+	return devices, nil
+}
+
+// listDevicesViaCLI uses CLI command to list devices (slower, fallback)
+func listDevicesViaCLI(ctx context.Context, bot *model.Bot) ([]DeviceInfo, error) {
 	// Get pod name
 	podName, err := k8s.GetPodName(ctx, bot.ID)
 	if err != nil {
-		return util.InternalError(c, "failed to get pod: "+err.Error())
+		return nil, fmt.Errorf("failed to get pod: %w", err)
 	}
 
 	// Execute devices list command with --json flag and token for gateway auth
 	output, err := k8s.ExecInPod(ctx, k8s.GetNamespace(), podName, "openclaw",
 		[]string{"node", "/app/openclaw.mjs", "devices", "list", "--json", "--token", bot.AccessToken})
 	if err != nil {
-		return util.InternalError(c, "failed to list devices: "+err.Error())
+		return nil, fmt.Errorf("failed to execute CLI: %w", err)
 	}
 
 	// Parse JSON output
 	var deviceList openclawDeviceList
 	if err := json.Unmarshal([]byte(output), &deviceList); err != nil {
-		return util.InternalError(c, "failed to parse devices: "+err.Error())
+		return nil, fmt.Errorf("failed to parse devices: %w", err)
 	}
 
 	// Convert to DeviceInfo
-	var devices []DeviceInfo
+	devices := []DeviceInfo{}
 	for _, d := range deviceList.Pending {
 		devices = append(devices, DeviceInfo{
 			RequestID:  d.RequestID,
@@ -167,21 +278,7 @@ func ListDevices(c echo.Context) error {
 		})
 	}
 
-	// Filter by status if specified
-	if statusFilter != "" {
-		var filtered []DeviceInfo
-		for _, d := range devices {
-			if d.Status == statusFilter {
-				filtered = append(filtered, d)
-			}
-		}
-		devices = filtered
-	}
-
-	return util.Success(c, map[string]interface{}{
-		"bot_id":  bot.ID,
-		"devices": devices,
-	})
+	return devices, nil
 }
 
 // ApproveDevice approves a pending device pairing request

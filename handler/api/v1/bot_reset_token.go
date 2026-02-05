@@ -30,18 +30,48 @@ func ResetBotToken(c echo.Context) error {
 		return util.InternalError(c, "failed to reset access token")
 	}
 
-	// If bot is running, restart it to apply new token
+	// Update config in database with new token
+	updatedBot, err := model.GetBotByID(id)
+	if err != nil {
+		return util.InternalError(c, "failed to reload bot")
+	}
+
+	openclawConfig, _ := updatedBot.GetOpenClawConfig()
+	if openclawConfig == nil {
+		openclawConfig = &model.OpenClawConfig{}
+	}
+	// Ensure gateway.auth.token is updated
+	if openclawConfig.Gateway == nil {
+		openclawConfig.Gateway = &model.GatewayConfig{}
+	}
+	if openclawConfig.Gateway.Auth == nil {
+		openclawConfig.Gateway.Auth = &model.GatewayAuthConfig{}
+	}
+	openclawConfig.Gateway.Auth.Mode = "token"
+	openclawConfig.Gateway.Auth.Token = newToken
+
+	// Save updated config to database
+	if err := updatedBot.SetOpenClawConfig(openclawConfig); err != nil {
+		c.Logger().Warnf("failed to update config with new token: %v", err)
+	} else if err := model.UpdateBot(updatedBot); err != nil {
+		c.Logger().Warnf("failed to save config with new token: %v", err)
+	}
+
+	// If bot is running, update deployment with new token
 	if bot.Status == model.BotStatusRunning {
 		ctx := context.Background()
-		if err := k8s.RestartDeployment(ctx, bot.ID); err != nil {
-			c.Logger().Warnf("failed to restart deployment after token reset: %v", err)
+		k8sConfig := convertToK8sConfig(updatedBot, openclawConfig)
+
+		// Update deployment spec with new token (this updates the startup command)
+		if err := k8s.UpdateDeploymentConfig(ctx, bot.ID, newToken, k8sConfig); err != nil {
+			c.Logger().Warnf("failed to update deployment after token reset: %v", err)
 		}
 	}
 
 	return util.Success(c, map[string]interface{}{
 		"id":           bot.ID,
 		"access_token": newToken,
-		"access_url":   buildAccessURL(bot.Slug),
+		"access_url":   buildAccessURL(bot.Slug, newToken),
 		"message":      "access token has been reset",
 	})
 }

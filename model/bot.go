@@ -27,27 +27,136 @@ type Bot struct {
 	UserID      string          `json:"user_id" gorm:"type:varchar(36);index;not null"`
 	Name        string          `json:"name" gorm:"type:varchar(255);not null"`
 	Slug        string          `json:"slug" gorm:"type:varchar(100);uniqueIndex"`
-	AccessToken string          `json:"access_token" gorm:"type:varchar(64)"`
-	Password    string          `json:"-" gorm:"type:varchar(64)"` // Gateway authentication password (not exposed in JSON)
+	AccessToken string          `json:"access_token" gorm:"type:varchar(64)"` // Used for CLI commands and token auth
 	Status      BotStatus       `json:"status" gorm:"type:varchar(50);default:'created'"`
-	Config      json.RawMessage `json:"config" gorm:"type:jsonb"`
+	Config      json.RawMessage `json:"config" gorm:"type:jsonb"` // OpenClaw config (gateway, models, agents, channels)
 	Endpoint    string          `json:"endpoint" gorm:"type:varchar(255)"`
 	ExpiresAt   *time.Time      `json:"expires_at,omitempty" gorm:"type:timestamp;index"` // nil means never expires
 	CreatedAt   time.Time       `json:"created_at"`
 	UpdatedAt   time.Time       `json:"updated_at"`
 }
 
+// ModelProvider represents a model provider configuration
+type ModelProvider struct {
+	Name    string        `json:"name"` // Provider name (anthropic, openai, minimax)
+	BaseURL string        `json:"base_url,omitempty"`
+	APIKey  string        `json:"api_key,omitempty"`
+	Auth    string        `json:"auth,omitempty"` // api-key, bearer
+	API     string        `json:"api,omitempty"`  // anthropic-messages, openai-completions
+	Models  []ModelConfig `json:"models,omitempty"`
+}
+
+// ModelConfig represents a single model configuration
+type ModelConfig struct {
+	ID            string   `json:"id"`
+	Name          string   `json:"name,omitempty"`
+	Reasoning     bool     `json:"reasoning,omitempty"`
+	Input         []string `json:"input,omitempty"`
+	ContextWindow int      `json:"context_window,omitempty"`
+	MaxTokens     int      `json:"max_tokens,omitempty"`
+}
+
+// AgentDefaults represents agent default configuration
+type AgentDefaults struct {
+	PrimaryModel string `json:"primary_model,omitempty"` // e.g., "anthropic/claude-sonnet-4-20250514"
+}
+
 type BotConfig struct {
-	Provider   string      `json:"provider,omitempty"`  // Provider key name in openclaw config (e.g., "anthropic", "minimax")
-	Model      string      `json:"model,omitempty"`
-	APIKey     string      `json:"api_key,omitempty"`
-	BaseURL    string      `json:"base_url,omitempty"` // For MiniMax or other Anthropic-compatible APIs
-	Auth       string      `json:"auth,omitempty"`     // Auth mode: "api-key" (default), "bearer", etc.
-	API        string      `json:"api,omitempty"`      // API format: "anthropic-messages" (default), "openai-completions", etc.
+	// Legacy single provider fields (kept for backward compatibility)
+	Provider string `json:"provider,omitempty"` // Provider key name in openclaw config (e.g., "anthropic", "minimax")
+	Model    string `json:"model,omitempty"`
+	APIKey   string `json:"api_key,omitempty"`
+	BaseURL  string `json:"base_url,omitempty"` // For MiniMax or other Anthropic-compatible APIs
+	Auth     string `json:"auth,omitempty"`     // Auth mode: "api-key" (default), "bearer", etc.
+	API      string `json:"api,omitempty"`      // API format: "anthropic-messages" (default), "openai-completions", etc.
+
+	// Multi-provider support
+	Providers     []ModelProvider `json:"providers,omitempty"`
+	AgentDefaults *AgentDefaults  `json:"agent_defaults,omitempty"`
+
+	// Other fields
 	AgentsMD   string      `json:"agents_md,omitempty"`
 	SoulMD     string      `json:"soul_md,omitempty"`
 	ToolsMD    string      `json:"tools_md,omitempty"`
 	MCPServers []MCPServer `json:"mcp_servers,omitempty"`
+
+	// Channels configuration (telegram, slack, discord, etc.)
+	// Structure: {"telegram": {"accounts": {"default": {"botToken": "xxx", "dmPolicy": "open", ...}}}}
+	Channels map[string]interface{} `json:"channels,omitempty"`
+}
+
+// GetProviders returns all providers, migrating legacy single provider if needed
+func (c *BotConfig) GetProviders() []ModelProvider {
+	if len(c.Providers) > 0 {
+		return c.Providers
+	}
+	// Migrate legacy single provider to providers list
+	if c.Provider != "" || c.APIKey != "" {
+		provider := ModelProvider{
+			Name:    c.Provider,
+			BaseURL: c.BaseURL,
+			APIKey:  c.APIKey,
+			Auth:    c.Auth,
+			API:     c.API,
+		}
+		if provider.Name == "" {
+			provider.Name = "anthropic"
+		}
+		// Add default model if Model is set
+		if c.Model != "" {
+			provider.Models = []ModelConfig{{
+				ID:            c.Model,
+				Name:          c.Model,
+				Input:         []string{"text"},
+				ContextWindow: 200000,
+				MaxTokens:     8192,
+			}}
+		}
+		return []ModelProvider{provider}
+	}
+	return nil
+}
+
+// GetProviderByName returns a provider by name
+func (c *BotConfig) GetProviderByName(name string) *ModelProvider {
+	for i := range c.Providers {
+		if c.Providers[i].Name == name {
+			return &c.Providers[i]
+		}
+	}
+	// Check legacy fields
+	if (c.Provider == name || (c.Provider == "" && name == "anthropic")) && (c.APIKey != "" || c.BaseURL != "") {
+		return &ModelProvider{
+			Name:    name,
+			BaseURL: c.BaseURL,
+			APIKey:  c.APIKey,
+			Auth:    c.Auth,
+			API:     c.API,
+		}
+	}
+	return nil
+}
+
+// AddOrUpdateProvider adds or updates a provider
+func (c *BotConfig) AddOrUpdateProvider(provider ModelProvider) {
+	for i := range c.Providers {
+		if c.Providers[i].Name == provider.Name {
+			c.Providers[i] = provider
+			return
+		}
+	}
+	c.Providers = append(c.Providers, provider)
+}
+
+// DeleteProvider removes a provider by name
+func (c *BotConfig) DeleteProvider(name string) bool {
+	for i := range c.Providers {
+		if c.Providers[i].Name == name {
+			c.Providers = append(c.Providers[:i], c.Providers[i+1:]...)
+			return true
+		}
+	}
+	return false
 }
 
 type MCPServer struct {
@@ -102,6 +211,28 @@ func (b *Bot) SetConfig(config *BotConfig) error {
 	}
 	b.Config = data
 	return nil
+}
+
+// SetConfigMap sets the bot config from a map (OpenClaw native format)
+func (b *Bot) SetConfigMap(config map[string]interface{}) error {
+	data, err := json.Marshal(config)
+	if err != nil {
+		return err
+	}
+	b.Config = data
+	return nil
+}
+
+// GetConfigMap returns the bot config as a map
+func (b *Bot) GetConfigMap() (map[string]interface{}, error) {
+	if b.Config == nil {
+		return make(map[string]interface{}), nil
+	}
+	var config map[string]interface{}
+	if err := json.Unmarshal(b.Config, &config); err != nil {
+		return nil, err
+	}
+	return config, nil
 }
 
 // Database operations

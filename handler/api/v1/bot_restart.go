@@ -30,34 +30,17 @@ func RestartBot(c echo.Context) error {
 
 	ctx := context.Background()
 
-	// Get bot config
-	k8sConfig := &k8s.BotConfig{
-		Password: bot.Password, // Use bot.Password from DB field
-	}
-	if botConfig, err := bot.GetConfig(); err == nil && botConfig != nil {
-		k8sConfig.Provider = botConfig.Provider
-		k8sConfig.Model = botConfig.Model
-		k8sConfig.APIKey = botConfig.APIKey
-		k8sConfig.BaseURL = botConfig.BaseURL
-		k8sConfig.Auth = botConfig.Auth
-		k8sConfig.API = botConfig.API
+	// Restart deployment (triggers rolling update)
+	if err := k8s.RestartDeployment(ctx, bot.ID); err != nil {
+		return util.InternalError(c, "failed to restart deployment: "+err.Error())
 	}
 
-	// Update deployment config and trigger rolling update (zero downtime)
-	if err := k8s.UpdateDeploymentConfig(ctx, bot.ID, bot.AccessToken, k8sConfig); err != nil {
-		return util.InternalError(c, "failed to update deployment: "+err.Error())
-	}
-
-	// Write config file to pod (async, after new pod is ready)
-	// Config is required for password auth
-	if k8sConfig.Password != "" {
-		go func() {
-			// On restart, only set default model if user hasn't configured one
-			if err := k8s.WriteConfigToBot(context.Background(), bot.ID, k8sConfig, false); err != nil {
-				c.Logger().Errorf("failed to write config to bot: %v", err)
-			}
-		}()
-	}
+	// Sync config to pod after restart
+	go func() {
+		if err := k8s.SyncConfigToPod(context.Background(), bot.ID); err != nil {
+			c.Logger().Errorf("failed to sync config to bot: %v", err)
+		}
+	}()
 
 	return util.Success(c, bot)
 }

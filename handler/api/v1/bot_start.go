@@ -31,17 +31,8 @@ func StartBot(c echo.Context) error {
 	ctx := context.Background()
 
 	// Get bot config for deployment
-	k8sConfig := &k8s.BotConfig{
-		Password: bot.Password, // Use bot.Password from DB field
-	}
-	if botConfig, err := bot.GetConfig(); err == nil && botConfig != nil {
-		k8sConfig.Provider = botConfig.Provider
-		k8sConfig.Model = botConfig.Model
-		k8sConfig.APIKey = botConfig.APIKey
-		k8sConfig.BaseURL = botConfig.BaseURL
-		k8sConfig.Auth = botConfig.Auth
-		k8sConfig.API = botConfig.API
-	}
+	openclawConfig, _ := bot.GetOpenClawConfig()
+	k8sConfig := convertToK8sConfig(bot, openclawConfig)
 
 	// Create K8s deployment
 	if err := k8s.CreateDeployment(ctx, bot.ID, bot.UserID, bot.AccessToken, k8sConfig); err != nil {
@@ -62,8 +53,8 @@ func StartBot(c echo.Context) error {
 	}
 
 	// Write config file to pod (async, don't block the response)
-	// Config is required for password auth
-	if k8sConfig.Password != "" {
+	// Config is required for token auth
+	if k8sConfig.AccessToken != "" {
 		go func() {
 			// On start, only set default model if user hasn't configured one
 			if err := k8s.WriteConfigToBot(context.Background(), bot.ID, k8sConfig, false); err != nil {
