@@ -4,10 +4,10 @@ import (
 	"context"
 
 	"github.com/labstack/echo/v4"
+	"github.com/workany-ai/clawork/middleware"
 	"github.com/workany-ai/clawork/model"
 	"github.com/workany-ai/clawork/service/k8s"
 	"github.com/workany-ai/clawork/util"
-	"gorm.io/gorm"
 )
 
 // ProviderRequest represents a request to add/update a provider
@@ -23,17 +23,9 @@ type ProviderRequest struct {
 // ListModelProviders returns all model providers for a bot
 // GET /bots/:id/config/models
 func ListModelProviders(c echo.Context) error {
-	id := c.Param("id")
-	if id == "" {
-		return util.BadRequest(c, "id is required")
-	}
-
-	bot, err := model.GetBotByID(id)
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return util.NotFound(c, "bot not found")
-		}
-		return util.InternalError(c, "failed to get bot")
+	bot := middleware.GetBotFromContext(c)
+	if bot == nil {
+		return util.Forbidden(c, "not authorized")
 	}
 
 	config, err := bot.GetOpenClawConfig()
@@ -53,9 +45,9 @@ func ListModelProviders(c echo.Context) error {
 // AddModelProvider adds a new model provider to the bot
 // POST /bots/:id/config/models
 func AddModelProvider(c echo.Context) error {
-	id := c.Param("id")
-	if id == "" {
-		return util.BadRequest(c, "id is required")
+	bot := middleware.GetBotFromContext(c)
+	if bot == nil {
+		return util.Forbidden(c, "not authorized")
 	}
 
 	var req ProviderRequest
@@ -65,14 +57,6 @@ func AddModelProvider(c echo.Context) error {
 
 	if req.Name == "" {
 		return util.BadRequest(c, "provider name is required")
-	}
-
-	bot, err := model.GetBotByID(id)
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return util.NotFound(c, "bot not found")
-		}
-		return util.InternalError(c, "failed to get bot")
 	}
 
 	config, err := bot.GetOpenClawConfig()
@@ -129,21 +113,14 @@ func AddModelProvider(c echo.Context) error {
 // GetModelProvider returns a single model provider by name
 // GET /bots/:id/config/models/:provider
 func GetModelProvider(c echo.Context) error {
-	id := c.Param("id")
-	providerName := c.Param("provider")
-	if id == "" {
-		return util.BadRequest(c, "id is required")
-	}
-	if providerName == "" {
-		return util.BadRequest(c, "provider name is required")
+	bot := middleware.GetBotFromContext(c)
+	if bot == nil {
+		return util.Forbidden(c, "not authorized")
 	}
 
-	bot, err := model.GetBotByID(id)
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return util.NotFound(c, "bot not found")
-		}
-		return util.InternalError(c, "failed to get bot")
+	providerName := c.Param("provider")
+	if providerName == "" {
+		return util.BadRequest(c, "provider name is required")
 	}
 
 	config, err := bot.GetOpenClawConfig()
@@ -166,11 +143,12 @@ func GetModelProvider(c echo.Context) error {
 // UpdateModelProvider updates a model provider configuration
 // PUT /bots/:id/config/models/:provider
 func UpdateModelProvider(c echo.Context) error {
-	id := c.Param("id")
-	providerName := c.Param("provider")
-	if id == "" {
-		return util.BadRequest(c, "id is required")
+	bot := middleware.GetBotFromContext(c)
+	if bot == nil {
+		return util.Forbidden(c, "not authorized")
 	}
+
+	providerName := c.Param("provider")
 	if providerName == "" {
 		return util.BadRequest(c, "provider name is required")
 	}
@@ -178,14 +156,6 @@ func UpdateModelProvider(c echo.Context) error {
 	var req ProviderRequest
 	if err := c.Bind(&req); err != nil {
 		return util.BadRequest(c, "invalid request body")
-	}
-
-	bot, err := model.GetBotByID(id)
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return util.NotFound(c, "bot not found")
-		}
-		return util.InternalError(c, "failed to get bot")
 	}
 
 	config, err := bot.GetOpenClawConfig()
@@ -237,21 +207,14 @@ func UpdateModelProvider(c echo.Context) error {
 // DeleteModelProvider removes a model provider
 // DELETE /bots/:id/config/models/:provider
 func DeleteModelProvider(c echo.Context) error {
-	id := c.Param("id")
-	providerName := c.Param("provider")
-	if id == "" {
-		return util.BadRequest(c, "id is required")
-	}
-	if providerName == "" {
-		return util.BadRequest(c, "provider name is required")
+	bot := middleware.GetBotFromContext(c)
+	if bot == nil {
+		return util.Forbidden(c, "not authorized")
 	}
 
-	bot, err := model.GetBotByID(id)
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return util.NotFound(c, "bot not found")
-		}
-		return util.InternalError(c, "failed to get bot")
+	providerName := c.Param("provider")
+	if providerName == "" {
+		return util.BadRequest(c, "provider name is required")
 	}
 
 	config, err := bot.GetOpenClawConfig()

@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/workany-ai/clawork/middleware"
 	"github.com/workany-ai/clawork/model"
 	"github.com/workany-ai/clawork/service/k8s"
 	"github.com/workany-ai/clawork/util"
-	"gorm.io/gorm"
 )
 
 // DeviceInfo represents a device in the pairing list
@@ -83,21 +83,13 @@ func formatAge(ms int64) string {
 //   - status: filter by status ("pending" or "paired"), default returns all
 //   - client_mode: filter by client mode ("web", "cli", "desktop", etc.), default returns all
 func ListDevices(c echo.Context) error {
-	id := c.Param("id")
-	if id == "" {
-		return util.BadRequest(c, "id is required")
+	bot := middleware.GetBotFromContext(c)
+	if bot == nil {
+		return util.Forbidden(c, "not authorized")
 	}
 
 	statusFilter := c.QueryParam("status")           // "pending", "paired", or empty for all
 	clientModeFilter := c.QueryParam("client_mode")  // "web", "cli", "desktop", etc.
-
-	bot, err := model.GetBotByID(id)
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return util.NotFound(c, "bot not found")
-		}
-		return util.InternalError(c, "failed to get bot")
-	}
 
 	if bot.Status != model.BotStatusRunning {
 		return util.BadRequest(c, "bot is not running")
@@ -283,22 +275,14 @@ func listDevicesViaCLI(ctx context.Context, bot *model.Bot) ([]DeviceInfo, error
 
 // ApproveDevice approves a pending device pairing request
 func ApproveDevice(c echo.Context) error {
-	id := c.Param("id")
-	requestID := c.Param("request_id")
-
-	if id == "" {
-		return util.BadRequest(c, "id is required")
+	bot := middleware.GetBotFromContext(c)
+	if bot == nil {
+		return util.Forbidden(c, "not authorized")
 	}
+
+	requestID := c.Param("request_id")
 	if requestID == "" {
 		return util.BadRequest(c, "request_id is required")
-	}
-
-	bot, err := model.GetBotByID(id)
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return util.NotFound(c, "bot not found")
-		}
-		return util.InternalError(c, "failed to get bot")
 	}
 
 	if bot.Status != model.BotStatusRunning {
@@ -332,26 +316,19 @@ func ApproveDevice(c echo.Context) error {
 // Query params:
 //   - role: the role to revoke (default: "user")
 func RevokeDevice(c echo.Context) error {
-	id := c.Param("id")
+	bot := middleware.GetBotFromContext(c)
+	if bot == nil {
+		return util.Forbidden(c, "not authorized")
+	}
+
 	deviceID := c.Param("device_id")
 	role := c.QueryParam("role")
 	if role == "" {
 		role = "operator" // default role
 	}
 
-	if id == "" {
-		return util.BadRequest(c, "id is required")
-	}
 	if deviceID == "" {
 		return util.BadRequest(c, "device_id is required")
-	}
-
-	bot, err := model.GetBotByID(id)
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return util.NotFound(c, "bot not found")
-		}
-		return util.InternalError(c, "failed to get bot")
 	}
 
 	if bot.Status != model.BotStatusRunning {

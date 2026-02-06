@@ -7,11 +7,14 @@ import (
 	"github.com/spf13/viper"
 	"github.com/workany-ai/clawork/model"
 	"github.com/workany-ai/clawork/util"
+	"gorm.io/gorm"
 )
 
 const (
 	// ContextKeyApp is the key used to store the authenticated app in context
 	ContextKeyApp = "authenticated_app"
+	// ContextKeyBot is the key used to store the authorized bot in context
+	ContextKeyBot = "authorized_bot"
 )
 
 // BearerAuth returns a middleware that validates Bearer token against the apps table
@@ -64,6 +67,49 @@ func GetAppFromContext(c echo.Context) *model.App {
 		return nil
 	}
 	return app
+}
+
+// BotOwnerAuth returns a middleware that validates the authenticated app owns the bot
+// being accessed. The bot is identified by the "id" path parameter.
+// If the app owns the bot, the bot is stored in context for handlers to use.
+func BotOwnerAuth() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			botID := c.Param("id")
+			if botID == "" {
+				return util.BadRequest(c, "bot id is required")
+			}
+
+			bot, err := model.GetBotByID(botID)
+			if err != nil {
+				if err == gorm.ErrRecordNotFound {
+					return util.NotFound(c, "bot not found")
+				}
+				return util.InternalError(c, "failed to get bot")
+			}
+
+			// If an app is in context, verify ownership
+			app := GetAppFromContext(c)
+			if app != nil {
+				if bot.AppID != app.ID {
+					return util.Forbidden(c, "not authorized to access this bot")
+				}
+			}
+
+			// Store bot in context for handlers
+			c.Set(ContextKeyBot, bot)
+			return next(c)
+		}
+	}
+}
+
+// GetBotFromContext retrieves the authorized bot from the request context
+func GetBotFromContext(c echo.Context) *model.Bot {
+	bot, ok := c.Get(ContextKeyBot).(*model.Bot)
+	if !ok {
+		return nil
+	}
+	return bot
 }
 
 // AdminAuth returns a middleware that validates admin token from config

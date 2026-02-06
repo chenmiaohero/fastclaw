@@ -4,10 +4,10 @@ import (
 	"context"
 
 	"github.com/labstack/echo/v4"
+	"github.com/workany-ai/clawork/middleware"
 	"github.com/workany-ai/clawork/model"
 	"github.com/workany-ai/clawork/service/k8s"
 	"github.com/workany-ai/clawork/util"
-	"gorm.io/gorm"
 )
 
 type AddChannelRequest struct {
@@ -34,12 +34,35 @@ type AddChannelRequest struct {
 	Extra map[string]interface{} `json:"extra,omitempty"`
 }
 
+// sensitiveConfigKeys lists config keys that should be masked in API responses
+var sensitiveConfigKeys = []string{
+	"botToken", "token", "appToken", "appSecret",
+	"appPassword", "channelSecret", "apiKey",
+}
+
+// maskSensitiveConfig removes sensitive fields from a config map
+func maskSensitiveConfig(config map[string]interface{}) map[string]interface{} {
+	if config == nil {
+		return config
+	}
+	masked := make(map[string]interface{}, len(config))
+	for k, v := range config {
+		masked[k] = v
+	}
+	for _, key := range sensitiveConfigKeys {
+		if _, exists := masked[key]; exists {
+			masked[key] = "******"
+		}
+	}
+	return masked
+}
+
 // AddChannel adds an IM channel to a bot
 // POST /bots/:id/channels
 func AddChannel(c echo.Context) error {
-	id := c.Param("id")
-	if id == "" {
-		return util.BadRequest(c, "id is required")
+	bot := middleware.GetBotFromContext(c)
+	if bot == nil {
+		return util.Forbidden(c, "not authorized")
 	}
 
 	var req AddChannelRequest
@@ -49,14 +72,6 @@ func AddChannel(c echo.Context) error {
 
 	if req.Channel == "" {
 		return util.BadRequest(c, "channel is required")
-	}
-
-	bot, err := model.GetBotByID(id)
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return util.NotFound(c, "bot not found")
-		}
-		return util.InternalError(c, "failed to get bot")
 	}
 
 	if bot.Status != model.BotStatusRunning {
@@ -129,17 +144,9 @@ func AddChannel(c echo.Context) error {
 // ListChannels lists all channels for a bot
 // GET /bots/:id/channels
 func ListChannels(c echo.Context) error {
-	id := c.Param("id")
-	if id == "" {
-		return util.BadRequest(c, "id is required")
-	}
-
-	bot, err := model.GetBotByID(id)
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return util.NotFound(c, "bot not found")
-		}
-		return util.InternalError(c, "failed to get bot")
+	bot := middleware.GetBotFromContext(c)
+	if bot == nil {
+		return util.Forbidden(c, "not authorized")
 	}
 
 	if bot.Status != model.BotStatusRunning {
@@ -152,6 +159,11 @@ func ListChannels(c echo.Context) error {
 		return util.InternalError(c, "failed to list channels: "+err.Error())
 	}
 
+	// Mask sensitive credentials in response
+	for i := range channels {
+		channels[i].Config = maskSensitiveConfig(channels[i].Config)
+	}
+
 	return util.Success(c, channels)
 }
 
@@ -159,23 +171,16 @@ func ListChannels(c echo.Context) error {
 // DELETE /bots/:id/channels/:channel?account=xxx
 // If account query param is provided, removes only that account; otherwise removes entire channel
 func RemoveChannel(c echo.Context) error {
-	id := c.Param("id")
+	bot := middleware.GetBotFromContext(c)
+	if bot == nil {
+		return util.Forbidden(c, "not authorized")
+	}
+
 	channel := c.Param("channel")
 	account := c.QueryParam("account") // Optional: specific account to remove
 
-	if id == "" {
-		return util.BadRequest(c, "id is required")
-	}
 	if channel == "" {
 		return util.BadRequest(c, "channel is required")
-	}
-
-	bot, err := model.GetBotByID(id)
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return util.NotFound(c, "bot not found")
-		}
-		return util.InternalError(c, "failed to get bot")
 	}
 
 	if bot.Status != model.BotStatusRunning {
@@ -212,12 +217,12 @@ type ChannelPairingRevokeRequest struct {
 // ApproveChannelPairing approves a channel pairing request
 // POST /bots/:id/channels/:channel/pairing/approve
 func ApproveChannelPairing(c echo.Context) error {
-	id := c.Param("id")
-	channel := c.Param("channel")
-
-	if id == "" {
-		return util.BadRequest(c, "id is required")
+	bot := middleware.GetBotFromContext(c)
+	if bot == nil {
+		return util.Forbidden(c, "not authorized")
 	}
+
+	channel := c.Param("channel")
 	if channel == "" {
 		return util.BadRequest(c, "channel is required")
 	}
@@ -229,14 +234,6 @@ func ApproveChannelPairing(c echo.Context) error {
 
 	if req.Code == "" {
 		return util.BadRequest(c, "pairing code is required")
-	}
-
-	bot, err := model.GetBotByID(id)
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return util.NotFound(c, "bot not found")
-		}
-		return util.InternalError(c, "failed to get bot")
 	}
 
 	if bot.Status != model.BotStatusRunning {
@@ -260,12 +257,12 @@ func ApproveChannelPairing(c echo.Context) error {
 // RevokeChannelPairing revokes a channel pairing for a user
 // POST /bots/:id/channels/:channel/pairing/revoke
 func RevokeChannelPairing(c echo.Context) error {
-	id := c.Param("id")
-	channel := c.Param("channel")
-
-	if id == "" {
-		return util.BadRequest(c, "id is required")
+	bot := middleware.GetBotFromContext(c)
+	if bot == nil {
+		return util.Forbidden(c, "not authorized")
 	}
+
+	channel := c.Param("channel")
 	if channel == "" {
 		return util.BadRequest(c, "channel is required")
 	}
@@ -277,14 +274,6 @@ func RevokeChannelPairing(c echo.Context) error {
 
 	if req.UserID == "" {
 		return util.BadRequest(c, "user_id is required")
-	}
-
-	bot, err := model.GetBotByID(id)
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return util.NotFound(c, "bot not found")
-		}
-		return util.InternalError(c, "failed to get bot")
 	}
 
 	if bot.Status != model.BotStatusRunning {
@@ -308,22 +297,14 @@ func RevokeChannelPairing(c echo.Context) error {
 // GetChannelPairedUsers lists all paired users for a channel
 // GET /bots/:id/channels/:channel/pairing/users
 func GetChannelPairedUsers(c echo.Context) error {
-	id := c.Param("id")
-	channel := c.Param("channel")
-
-	if id == "" {
-		return util.BadRequest(c, "id is required")
+	bot := middleware.GetBotFromContext(c)
+	if bot == nil {
+		return util.Forbidden(c, "not authorized")
 	}
+
+	channel := c.Param("channel")
 	if channel == "" {
 		return util.BadRequest(c, "channel is required")
-	}
-
-	bot, err := model.GetBotByID(id)
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return util.NotFound(c, "bot not found")
-		}
-		return util.InternalError(c, "failed to get bot")
 	}
 
 	if bot.Status != model.BotStatusRunning {
@@ -345,22 +326,14 @@ func GetChannelPairedUsers(c echo.Context) error {
 // ListChannelPairingRequests lists pending pairing requests for a channel
 // GET /bots/:id/channels/:channel/pairing
 func ListChannelPairingRequests(c echo.Context) error {
-	id := c.Param("id")
-	channel := c.Param("channel")
-
-	if id == "" {
-		return util.BadRequest(c, "id is required")
+	bot := middleware.GetBotFromContext(c)
+	if bot == nil {
+		return util.Forbidden(c, "not authorized")
 	}
+
+	channel := c.Param("channel")
 	if channel == "" {
 		return util.BadRequest(c, "channel is required")
-	}
-
-	bot, err := model.GetBotByID(id)
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return util.NotFound(c, "bot not found")
-		}
-		return util.InternalError(c, "failed to get bot")
 	}
 
 	if bot.Status != model.BotStatusRunning {

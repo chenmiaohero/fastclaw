@@ -4,34 +4,26 @@ import (
 	"context"
 
 	"github.com/labstack/echo/v4"
+	"github.com/workany-ai/clawork/middleware"
 	"github.com/workany-ai/clawork/model"
 	"github.com/workany-ai/clawork/service/k8s"
 	"github.com/workany-ai/clawork/util"
-	"gorm.io/gorm"
 )
 
 func ResetBotToken(c echo.Context) error {
-	id := c.Param("id")
-	if id == "" {
-		return util.BadRequest(c, "id is required")
-	}
-
-	bot, err := model.GetBotByID(id)
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return util.NotFound(c, "bot not found")
-		}
-		return util.InternalError(c, "failed to get bot")
+	bot := middleware.GetBotFromContext(c)
+	if bot == nil {
+		return util.Forbidden(c, "not authorized")
 	}
 
 	// Reset the access token
-	newToken, err := model.ResetBotAccessToken(id)
+	newToken, err := model.ResetBotAccessToken(bot.ID)
 	if err != nil {
 		return util.InternalError(c, "failed to reset access token")
 	}
 
 	// Update config in database with new token
-	updatedBot, err := model.GetBotByID(id)
+	updatedBot, err := model.GetBotByID(bot.ID)
 	if err != nil {
 		return util.InternalError(c, "failed to reload bot")
 	}

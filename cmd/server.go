@@ -76,52 +76,59 @@ func startServer() {
 	api := e.Group("/bot/api/v1")
 	api.Use(authmw.BearerAuth()) // Bearer token authentication
 	{
-		// Bot CRUD
+		// Bot collection routes (no ownership check needed)
 		api.POST("/bots", v1.CreateBot)
 		api.GET("/bots", v1.ListBots)
-		api.GET("/bots/:id", v1.GetBot)
-		api.PUT("/bots/:id", v1.UpdateBot)
-		api.DELETE("/bots/:id", v1.DeleteBot)
+	}
+
+	// Bot instance routes: require ownership validation
+	botAPI := api.Group("/bots/:id")
+	botAPI.Use(authmw.BotOwnerAuth()) // Verify authenticated app owns the bot
+	{
+		// Bot CRUD
+		botAPI.GET("", v1.GetBot)
+		botAPI.PUT("", v1.UpdateBot)
+		botAPI.DELETE("", v1.DeleteBot)
 
 		// Bot lifecycle
-		api.POST("/bots/:id/start", v1.StartBot)
-		api.POST("/bots/:id/stop", v1.StopBot)
-		api.POST("/bots/:id/restart", v1.RestartBot)
-		api.GET("/bots/:id/status", v1.GetBotStatus)
-		api.GET("/bots/:id/connect", v1.GetBotConnect)
-		api.POST("/bots/:id/reset-token", v1.ResetBotToken)
+		botAPI.POST("/start", v1.StartBot)
+		botAPI.POST("/stop", v1.StopBot)
+		botAPI.POST("/restart", v1.RestartBot)
+		botAPI.GET("/status", v1.GetBotStatus)
+		botAPI.GET("/connect", v1.GetBotConnect)
+		botAPI.POST("/reset-token", v1.ResetBotToken)
 
 		// Skills management
-		api.GET("/bots/:id/skills", v1.ListSkills)
-		api.PUT("/bots/:id/skills/:name", v1.UpdateSkill)
-		api.DELETE("/bots/:id/skills/:name", v1.DeleteSkill)
+		botAPI.GET("/skills", v1.ListSkills)
+		botAPI.PUT("/skills/:name", v1.UpdateSkill)
+		botAPI.DELETE("/skills/:name", v1.DeleteSkill)
 
 		// Channels management (IM integrations)
-		api.POST("/bots/:id/channels", v1.AddChannel)
-		api.GET("/bots/:id/channels", v1.ListChannels)
-		api.DELETE("/bots/:id/channels/:channel", v1.RemoveChannel)
+		botAPI.POST("/channels", v1.AddChannel)
+		botAPI.GET("/channels", v1.ListChannels)
+		botAPI.DELETE("/channels/:channel", v1.RemoveChannel)
 
 		// Channel pairing management
-		api.GET("/bots/:id/channels/:channel/pairing", v1.ListChannelPairingRequests)
-		api.POST("/bots/:id/channels/:channel/pairing/approve", v1.ApproveChannelPairing)
-		api.POST("/bots/:id/channels/:channel/pairing/revoke", v1.RevokeChannelPairing)
-		api.GET("/bots/:id/channels/:channel/pairing/users", v1.GetChannelPairedUsers)
+		botAPI.GET("/channels/:channel/pairing", v1.ListChannelPairingRequests)
+		botAPI.POST("/channels/:channel/pairing/approve", v1.ApproveChannelPairing)
+		botAPI.POST("/channels/:channel/pairing/revoke", v1.RevokeChannelPairing)
+		botAPI.GET("/channels/:channel/pairing/users", v1.GetChannelPairedUsers)
 
 		// Device pairing management
-		api.GET("/bots/:id/devices", v1.ListDevices)
-		api.POST("/bots/:id/devices/:request_id/approve", v1.ApproveDevice)
-		api.DELETE("/bots/:id/devices/:device_id", v1.RevokeDevice)
+		botAPI.GET("/devices", v1.ListDevices)
+		botAPI.POST("/devices/:request_id/approve", v1.ApproveDevice)
+		botAPI.DELETE("/devices/:device_id", v1.RevokeDevice)
 
 		// Model providers management
-		api.GET("/bots/:id/config/models", v1.ListModelProviders)
-		api.POST("/bots/:id/config/models", v1.AddModelProvider)
-		api.GET("/bots/:id/config/models/:provider", v1.GetModelProvider)
-		api.PUT("/bots/:id/config/models/:provider", v1.UpdateModelProvider)
-		api.DELETE("/bots/:id/config/models/:provider", v1.DeleteModelProvider)
+		botAPI.GET("/config/models", v1.ListModelProviders)
+		botAPI.POST("/config/models", v1.AddModelProvider)
+		botAPI.GET("/config/models/:provider", v1.GetModelProvider)
+		botAPI.PUT("/config/models/:provider", v1.UpdateModelProvider)
+		botAPI.DELETE("/config/models/:provider", v1.DeleteModelProvider)
 
 		// Agent defaults management
-		api.GET("/bots/:id/config/defaults", v1.GetAgentDefaults)
-		api.PUT("/bots/:id/config/defaults", v1.SetAgentDefaults)
+		botAPI.GET("/config/defaults", v1.GetAgentDefaults)
+		botAPI.PUT("/config/defaults", v1.SetAgentDefaults)
 	}
 
 	// Admin API routes: /bot/api/v1/admin/* (requires admin token)

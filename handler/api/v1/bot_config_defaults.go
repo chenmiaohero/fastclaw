@@ -4,10 +4,10 @@ import (
 	"context"
 
 	"github.com/labstack/echo/v4"
+	"github.com/workany-ai/clawork/middleware"
 	"github.com/workany-ai/clawork/model"
 	"github.com/workany-ai/clawork/service/k8s"
 	"github.com/workany-ai/clawork/util"
-	"gorm.io/gorm"
 )
 
 // AgentDefaultsRequest represents a request to set agent defaults
@@ -18,17 +18,9 @@ type AgentDefaultsRequest struct {
 // GetAgentDefaults returns the agent default settings
 // GET /bots/:id/config/defaults
 func GetAgentDefaults(c echo.Context) error {
-	id := c.Param("id")
-	if id == "" {
-		return util.BadRequest(c, "id is required")
-	}
-
-	bot, err := model.GetBotByID(id)
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return util.NotFound(c, "bot not found")
-		}
-		return util.InternalError(c, "failed to get bot")
+	bot := middleware.GetBotFromContext(c)
+	if bot == nil {
+		return util.Forbidden(c, "not authorized")
 	}
 
 	config, err := bot.GetOpenClawConfig()
@@ -53,22 +45,14 @@ func GetAgentDefaults(c echo.Context) error {
 // SetAgentDefaults sets the agent default settings
 // PUT /bots/:id/config/defaults
 func SetAgentDefaults(c echo.Context) error {
-	id := c.Param("id")
-	if id == "" {
-		return util.BadRequest(c, "id is required")
+	bot := middleware.GetBotFromContext(c)
+	if bot == nil {
+		return util.Forbidden(c, "not authorized")
 	}
 
 	var req AgentDefaultsRequest
 	if err := c.Bind(&req); err != nil {
 		return util.BadRequest(c, "invalid request body")
-	}
-
-	bot, err := model.GetBotByID(id)
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return util.NotFound(c, "bot not found")
-		}
-		return util.InternalError(c, "failed to get bot")
 	}
 
 	config, err := bot.GetOpenClawConfig()

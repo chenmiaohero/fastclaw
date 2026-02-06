@@ -54,3 +54,10 @@ func Unauthorized(c echo.Context, message string) error {
 		Message: message,
 	})
 }
+
+func Forbidden(c echo.Context, message string) error {
+	return c.JSON(http.StatusForbidden, Response{
+		Code:    403,
+		Message: message,
+	})
+}
