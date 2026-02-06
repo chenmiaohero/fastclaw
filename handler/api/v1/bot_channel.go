@@ -34,28 +34,6 @@ type AddChannelRequest struct {
 	Extra map[string]interface{} `json:"extra,omitempty"`
 }
 
-// sensitiveConfigKeys lists config keys that should be masked in API responses
-var sensitiveConfigKeys = []string{
-	"botToken", "token", "appToken", "appSecret",
-	"appPassword", "channelSecret", "apiKey",
-}
-
-// maskSensitiveConfig removes sensitive fields from a config map
-func maskSensitiveConfig(config map[string]interface{}) map[string]interface{} {
-	if config == nil {
-		return config
-	}
-	masked := make(map[string]interface{}, len(config))
-	for k, v := range config {
-		masked[k] = v
-	}
-	for _, key := range sensitiveConfigKeys {
-		if _, exists := masked[key]; exists {
-			masked[key] = "******"
-		}
-	}
-	return masked
-}
 
 // AddChannel adds an IM channel to a bot
 // POST /bots/:id/channels
@@ -157,11 +135,6 @@ func ListChannels(c echo.Context) error {
 	channels, err := k8s.ListBotChannels(context.Background(), bot.ID, bot.AccessToken)
 	if err != nil {
 		return util.InternalError(c, "failed to list channels: "+err.Error())
-	}
-
-	// Mask sensitive credentials in response
-	for i := range channels {
-		channels[i].Config = maskSensitiveConfig(channels[i].Config)
 	}
 
 	return util.Success(c, channels)

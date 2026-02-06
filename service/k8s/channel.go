@@ -36,11 +36,33 @@ func AddChannelToBot(ctx context.Context, botID, accessToken, channel, account s
 		return fmt.Errorf("failed to read config: %w", err)
 	}
 
-	// Use the provided channel config directly
-	accountConfig := channelConfig
+	// Separate channel-level fields from account-level fields
+	// Channel-level: dmPolicy, groupPolicy, enabled, allowFrom (same level as "accounts")
+	// Account-level: botToken, appId, appSecret, etc. (inside accounts.{name})
+	channelLevelKeys := map[string]bool{
+		"dmPolicy": true, "groupPolicy": true,
+		"enabled": true, "allowFrom": true,
+	}
+	channelLevelConfig := make(map[string]interface{})
+	accountConfig := make(map[string]interface{})
+	for k, v := range channelConfig {
+		if channelLevelKeys[k] {
+			channelLevelConfig[k] = v
+		} else {
+			accountConfig[k] = v
+		}
+	}
+
+	// Set channel-level defaults if not provided by upstream
+	if _, ok := channelLevelConfig["dmPolicy"]; !ok {
+		channelLevelConfig["dmPolicy"] = "open"
+	}
+	if _, ok := channelLevelConfig["enabled"]; !ok {
+		channelLevelConfig["enabled"] = true
+	}
 
 	// Add/update channel account in config using multi-account structure
-	// Structure: channels.{channel}.accounts.{account}
+	// Structure: channels.{channel}.{enabled, dmPolicy, ...}.accounts.{account}
 	if existingConfig["channels"] == nil {
 		existingConfig["channels"] = make(map[string]interface{})
 	}
@@ -50,20 +72,25 @@ func AddChannelToBot(ctx context.Context, botID, accessToken, channel, account s
 	if channels[channel] == nil {
 		channels[channel] = make(map[string]interface{})
 	}
-	channelConfig, ok := channels[channel].(map[string]interface{})
+	chCfg, ok := channels[channel].(map[string]interface{})
 	if !ok {
-		channelConfig = make(map[string]interface{})
-		channels[channel] = channelConfig
+		chCfg = make(map[string]interface{})
+		channels[channel] = chCfg
+	}
+
+	// Apply channel-level config (upstream values override existing)
+	for k, v := range channelLevelConfig {
+		chCfg[k] = v
 	}
 
 	// Get or create accounts map
-	if channelConfig["accounts"] == nil {
-		channelConfig["accounts"] = make(map[string]interface{})
+	if chCfg["accounts"] == nil {
+		chCfg["accounts"] = make(map[string]interface{})
 	}
-	accounts, ok := channelConfig["accounts"].(map[string]interface{})
+	accounts, ok := chCfg["accounts"].(map[string]interface{})
 	if !ok {
 		accounts = make(map[string]interface{})
-		channelConfig["accounts"] = accounts
+		chCfg["accounts"] = accounts
 	}
 
 	// Add/update the account
