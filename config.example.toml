@@ -63,6 +63,9 @@ cpu_limit = "2000m"
 memory_limit = "4Gi"
 cpu_request = "500m"
 memory_request = "1Gi"
+# 容器临时存储限制 (限制 AI 在容器可写层写入的总量，如 pip 包、临时文件等)
+# 超限后 Pod 会被驱逐并重建
+ephemeral_storage_limit = "1Gi"
 # 以下 gateway 配置为可选项，不配置时 OpenClaw 使用默认行为（允许所有 origin）
 # 仅在需要精确控制时才配置这些选项
 #

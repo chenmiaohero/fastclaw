@@ -119,6 +119,10 @@ func CreateDeployment(ctx context.Context, botID, userID, accessToken string, co
 	if nodeMaxOldSpaceSize == 0 {
 		nodeMaxOldSpaceSize = 3072
 	}
+	ephemeralStorageLimit := viper.GetString("openclaw.ephemeral_storage_limit")
+	if ephemeralStorageLimit == "" {
+		ephemeralStorageLimit = "1Gi"
+	}
 	imagePullSecret := viper.GetString("openclaw.image_pull_secret")
 
 	labels := map[string]string{
@@ -172,8 +176,9 @@ func CreateDeployment(ctx context.Context, botID, userID, accessToken string, co
 					},
 					Containers: []corev1.Container{
 						{
-							Name:  "openclaw",
-							Image: image,
+							Name:            "openclaw",
+							Image:           image,
+							ImagePullPolicy: corev1.PullIfNotPresent,
 							SecurityContext: &corev1.SecurityContext{
 								RunAsUser:                func() *int64 { v := int64(1000); return &v }(),
 								RunAsGroup:               func() *int64 { v := int64(1000); return &v }(),
@@ -236,8 +241,9 @@ node /app/openclaw.mjs gateway --port %d --bind lan --allow-unconfigured --dev`,
 							},
 							Resources: corev1.ResourceRequirements{
 								Limits: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse(cpuLimit),
-									corev1.ResourceMemory: resource.MustParse(memoryLimit),
+									corev1.ResourceCPU:              resource.MustParse(cpuLimit),
+									corev1.ResourceMemory:           resource.MustParse(memoryLimit),
+									corev1.ResourceEphemeralStorage: resource.MustParse(ephemeralStorageLimit),
 								},
 								Requests: corev1.ResourceList{
 									corev1.ResourceCPU:    resource.MustParse(cpuRequest),
