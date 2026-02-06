@@ -22,7 +22,7 @@ type ChannelConfig struct {
 // AddChannelToBot adds an IM channel account to a bot's OpenClaw instance
 // This writes directly to the config file, openclaw will hot-reload
 // Supports multi-account: channels.telegram.accounts.{accountName}
-func AddChannelToBot(ctx context.Context, botID, accessToken, channel, account, botToken, appToken string, extraConfig map[string]interface{}) error {
+func AddChannelToBot(ctx context.Context, botID, accessToken, channel, account string, channelConfig map[string]interface{}) error {
 	namespace := GetNamespace()
 
 	podName, err := waitForPodReady(ctx, botID, 30)
@@ -36,13 +36,8 @@ func AddChannelToBot(ctx context.Context, botID, accessToken, channel, account, 
 		return fmt.Errorf("failed to read config: %w", err)
 	}
 
-	// Build account config based on channel type
-	accountConfig := buildChannelConfig(channel, botToken, appToken)
-
-	// Merge extra config options (dmPolicy, groupPolicy, allowFrom, enabled, etc.)
-	for k, v := range extraConfig {
-		accountConfig[k] = v
-	}
+	// Use the provided channel config directly
+	accountConfig := channelConfig
 
 	// Add/update channel account in config using multi-account structure
 	// Structure: channels.{channel}.accounts.{account}

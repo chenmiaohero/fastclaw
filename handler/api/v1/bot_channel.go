@@ -11,18 +11,25 @@ import (
 )
 
 type AddChannelRequest struct {
-	Channel string `json:"channel"`           // telegram, discord, slack, whatsapp, etc.
+	Channel string `json:"channel"`           // telegram, discord, slack, whatsapp, feishu, etc.
 	Account string `json:"account,omitempty"` // Account name for multi-account support (default: "default")
 	// Bot token - support both formats for compatibility
-	BotToken string `json:"botToken,omitempty"` // Primary: botToken (OpenClaw native format)
+	BotToken string `json:"botToken,omitempty"` // Primary: botToken (telegram, discord, slack)
 	Token    string `json:"token,omitempty"`    // Alias: token (legacy format)
 	// Slack specific
 	AppToken string `json:"appToken,omitempty"` // Slack app token (xapp-...)
+	// Feishu specific
+	AppID     string `json:"appId,omitempty"`     // Feishu app ID
+	AppSecret string `json:"appSecret,omitempty"` // Feishu app secret
+	// Teams specific
+	AppPassword string `json:"appPassword,omitempty"` // Teams app password
+	// LINE specific
+	ChannelSecret string `json:"channelSecret,omitempty"` // LINE channel secret
 	// Additional channel config options (dmPolicy, groupPolicy, allowFrom, enabled, etc.)
-	DMPolicy   string   `json:"dmPolicy,omitempty"`   // pairing, allowlist, open, disabled
-	GroupPolicy string  `json:"groupPolicy,omitempty"` // open, allowlist, disabled
-	AllowFrom  []string `json:"allowFrom,omitempty"`  // List of allowed users/groups
-	Enabled    *bool    `json:"enabled,omitempty"`    // Enable/disable channel
+	DMPolicy    string   `json:"dmPolicy,omitempty"`    // pairing, allowlist, open, disabled
+	GroupPolicy string   `json:"groupPolicy,omitempty"` // open, allowlist, disabled
+	AllowFrom   []string `json:"allowFrom,omitempty"`   // List of allowed users/groups
+	Enabled     *bool    `json:"enabled,omitempty"`     // Enable/disable channel
 	// Extra config for any other fields
 	Extra map[string]interface{} `json:"extra,omitempty"`
 }
@@ -70,6 +77,26 @@ func AddChannel(c echo.Context) error {
 
 	// Build config map from request fields
 	configMap := make(map[string]interface{})
+	// Token fields
+	if botToken != "" {
+		configMap["botToken"] = botToken
+	}
+	if req.AppToken != "" {
+		configMap["appToken"] = req.AppToken
+	}
+	if req.AppID != "" {
+		configMap["appId"] = req.AppID
+	}
+	if req.AppSecret != "" {
+		configMap["appSecret"] = req.AppSecret
+	}
+	if req.AppPassword != "" {
+		configMap["appPassword"] = req.AppPassword
+	}
+	if req.ChannelSecret != "" {
+		configMap["channelSecret"] = req.ChannelSecret
+	}
+	// Policy fields
 	if req.DMPolicy != "" {
 		configMap["dmPolicy"] = req.DMPolicy
 	}
@@ -88,7 +115,7 @@ func AddChannel(c echo.Context) error {
 	}
 
 	// Add channel to the running pod
-	if err := k8s.AddChannelToBot(context.Background(), bot.ID, bot.AccessToken, req.Channel, account, botToken, req.AppToken, configMap); err != nil {
+	if err := k8s.AddChannelToBot(context.Background(), bot.ID, bot.AccessToken, req.Channel, account, configMap); err != nil {
 		return util.InternalError(c, "failed to add channel: "+err.Error())
 	}
 
