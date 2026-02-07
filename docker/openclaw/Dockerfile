@@ -9,6 +9,8 @@ USER root
 ENV UV_PYTHON_INSTALL_DIR=/usr/local/share/uv/python
 RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh && \
     uv python install 3.12 && \
+    ln -sf /usr/bin/python3 /usr/local/bin/python && \
+    printf '#!/bin/sh\nnode /app/openclaw.mjs "$@"\n' > /usr/local/bin/openclaw && chmod +x /usr/local/bin/openclaw && \
     npm install -g clawhub
 
 # Add more plugins here as needed:
