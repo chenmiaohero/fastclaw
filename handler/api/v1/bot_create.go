@@ -50,12 +50,6 @@ func CreateBot(c echo.Context) error {
 		}
 	}
 
-	// Check if bot with same name exists for this user
-	existing, _ := model.GetBotByUserAndName(req.UserID, req.Name)
-	if existing != nil {
-		return util.BadRequest(c, "bot with this name already exists")
-	}
-
 	// Get app_id from authenticated app context
 	var appID string
 	if app := middleware.GetAppFromContext(c); app != nil {
