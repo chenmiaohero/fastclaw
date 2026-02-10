@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"log"
+	"net"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -49,6 +50,11 @@ func startServer() {
 			// Remove port if present
 			if idx := strings.Index(host, ":"); idx > 0 {
 				host = host[:idx]
+			}
+
+			// Skip IP addresses (e.g., K8s health checks via pod IP)
+			if net.ParseIP(host) != nil {
+				return next(c)
 			}
 
 			// Skip if this is the API domain itself (no subdomain)
