@@ -61,8 +61,13 @@ func GetBotConnect(c echo.Context) error {
 		serviceName := k8s.GetServiceName(bot.ID)
 		namespace := k8s.GetNamespace()
 
-		// Get domain template from config
-		domainTemplate := viper.GetString("domain.bot_domain_template")
+		// Get domain template: app-level first, then config file fallback
+		var domainTemplate string
+		if app, err := model.GetAppByID(bot.AppID); err == nil && app.BotDomainTemplate != "" {
+			domainTemplate = app.BotDomainTemplate
+		} else {
+			domainTemplate = viper.GetString("domain.bot_domain_template")
+		}
 		if domainTemplate == "" {
 			domainTemplate = "http://{service_name}.{namespace}.orb.local:18789"
 		}

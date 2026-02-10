@@ -7,18 +7,20 @@ import (
 )
 
 type CreateAppRequest struct {
-	Name        string `json:"name" validate:"required"`
-	URL         string `json:"url,omitempty"`
-	Description string `json:"description,omitempty"`
-	OwnerEmail  string `json:"owner_email,omitempty"`
+	Name              string `json:"name" validate:"required"`
+	URL               string `json:"url,omitempty"`
+	Description       string `json:"description,omitempty"`
+	OwnerEmail        string `json:"owner_email,omitempty"`
+	BotDomainTemplate string `json:"bot_domain_template,omitempty"`
 }
 
 type UpdateAppRequest struct {
-	Name        string `json:"name,omitempty"`
-	URL         string `json:"url,omitempty"`
-	Description string `json:"description,omitempty"`
-	OwnerEmail  string `json:"owner_email,omitempty"`
-	Status      string `json:"status,omitempty"` // active, disabled
+	Name              string `json:"name,omitempty"`
+	URL               string `json:"url,omitempty"`
+	Description       string `json:"description,omitempty"`
+	OwnerEmail        string `json:"owner_email,omitempty"`
+	BotDomainTemplate string `json:"bot_domain_template,omitempty"`
+	Status            string `json:"status,omitempty"` // active, disabled
 }
 
 func CreateApp(c echo.Context) error {
@@ -32,10 +34,11 @@ func CreateApp(c echo.Context) error {
 	}
 
 	app := &model.App{
-		Name:        req.Name,
-		URL:         req.URL,
-		Description: req.Description,
-		OwnerEmail:  req.OwnerEmail,
+		Name:              req.Name,
+		URL:               req.URL,
+		Description:       req.Description,
+		OwnerEmail:        req.OwnerEmail,
+		BotDomainTemplate: req.BotDomainTemplate,
 	}
 
 	if err := model.CreateApp(app); err != nil {
@@ -95,6 +98,9 @@ func UpdateApp(c echo.Context) error {
 	}
 	if req.OwnerEmail != "" {
 		app.OwnerEmail = req.OwnerEmail
+	}
+	if req.BotDomainTemplate != "" {
+		app.BotDomainTemplate = req.BotDomainTemplate
 	}
 	if req.Status != "" {
 		if req.Status != "active" && req.Status != "disabled" {

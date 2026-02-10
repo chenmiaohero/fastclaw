@@ -11,15 +11,16 @@ import (
 )
 
 type App struct {
-	ID          string    `json:"id" gorm:"primaryKey;type:varchar(36)"`
-	Name        string    `json:"name" gorm:"type:varchar(255);not null"`
-	URL         string    `json:"url,omitempty" gorm:"type:varchar(500)"`
-	Description string    `json:"description,omitempty" gorm:"type:text"`
-	OwnerEmail  string    `json:"owner_email,omitempty" gorm:"type:varchar(255)"`
-	APIToken    string    `json:"api_token" gorm:"type:varchar(64);uniqueIndex;not null"`
-	Status      string    `json:"status" gorm:"type:varchar(50);default:'active'"` // active, disabled
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID                string    `json:"id" gorm:"primaryKey;type:varchar(36)"`
+	Name              string    `json:"name" gorm:"type:varchar(255);not null"`
+	URL               string    `json:"url,omitempty" gorm:"type:varchar(500)"`
+	Description       string    `json:"description,omitempty" gorm:"type:text"`
+	OwnerEmail        string    `json:"owner_email,omitempty" gorm:"type:varchar(255)"`
+	APIToken          string    `json:"api_token" gorm:"type:varchar(64);uniqueIndex;not null"`
+	BotDomainTemplate string    `json:"bot_domain_template,omitempty" gorm:"type:varchar(500)"`
+	Status            string    `json:"status" gorm:"type:varchar(50);default:'active'"` // active, disabled
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 
 func (App) TableName() string {

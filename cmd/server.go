@@ -38,14 +38,11 @@ func init() {
 func startServer() {
 	e := echo.New()
 
-	// Get domain config
-	botDomainSuffix := viper.GetString("domain.bot_domain_suffix")
-	if botDomainSuffix == "" {
-		botDomainSuffix = "workany.loc"
-	}
+	// Get API domain to exclude from subdomain routing
+	apiDomain := viper.GetString("domain.api_domain")
 
 	// Subdomain routing middleware (must run BEFORE routing with e.Pre)
-	// {bot-id}.workany.loc/* -> /bot/{bot-id}/*
+	// {bot-id}.any-domain/* -> /proxy/{bot-id}/*
 	e.Pre(func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			host := c.Request().Host
@@ -54,16 +51,23 @@ func startServer() {
 				host = host[:idx]
 			}
 
-			// Check if this is a bot subdomain request
-			// e.g., 4f1f101c.workany.loc -> extract 4f1f101c
-			if strings.HasSuffix(host, "."+botDomainSuffix) {
-				botID := strings.TrimSuffix(host, "."+botDomainSuffix)
-				if botID != "" && !strings.Contains(botID, ".") {
-					// Rewrite to /proxy/{bot-id}/*
+			// Skip if this is the API domain itself (no subdomain)
+			if host == apiDomain {
+				return next(c)
+			}
+
+			// Extract first subdomain segment as bot ID
+			// e.g., "abc123.skillsbot.loc" -> "abc123"
+			// e.g., "abc123.workany.loc" -> "abc123"
+			if dotIdx := strings.Index(host, "."); dotIdx > 0 {
+				botID := host[:dotIdx]
+				if botID != "" {
 					path := c.Request().URL.Path
 					c.Request().URL.Path = "/proxy/" + botID + path
+					return next(c)
 				}
 			}
+
 			return next(c)
 		}
 	})
