@@ -152,6 +152,10 @@ func startServer() {
 		admin.PUT("/apps/:id", v1.UpdateApp)
 		admin.DELETE("/apps/:id", v1.DeleteApp)
 		admin.POST("/apps/:id/reset-token", v1.ResetAppToken)
+
+		// Bot upgrade management
+		admin.POST("/bots/upgrade", v1.UpgradeAllBots)
+		admin.POST("/bots/:id/upgrade", v1.UpgradeBot)
 	}
 
 	// Health check

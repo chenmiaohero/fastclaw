@@ -3,6 +3,7 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/spf13/viper"
 	appsv1 "k8s.io/api/apps/v1"
@@ -19,6 +20,15 @@ func getShortID(botID string) string {
 		return botID[:8]
 	}
 	return botID
+}
+
+// imagePullPolicy returns PullAlways for "latest" tag, PullIfNotPresent otherwise.
+func imagePullPolicy(image string) corev1.PullPolicy {
+	// "foo:latest", "foo" (no tag defaults to latest), or "foo:Latest"
+	if !strings.Contains(image, ":") || strings.HasSuffix(strings.ToLower(image), ":latest") {
+		return corev1.PullAlways
+	}
+	return corev1.PullIfNotPresent
 }
 
 func GetDeploymentName(botID string) string {
@@ -52,7 +62,8 @@ type ModelConfigEntry struct {
 
 // AgentDefaultsConfig holds agent default configuration
 type AgentDefaultsConfig struct {
-	PrimaryModel string // e.g., "anthropic/claude-sonnet-4-20250514"
+	PrimaryModel  string // e.g., "anthropic/claude-sonnet-4-20250514"
+	FallbackModel string // e.g., "anthropic/claude-haiku-4-5-20251001" - used when primary is unavailable
 }
 
 // BotConfig holds the configuration for a bot
@@ -178,7 +189,7 @@ func CreateDeployment(ctx context.Context, botID, userID, accessToken string, co
 						{
 							Name:            "openclaw",
 							Image:           image,
-							ImagePullPolicy: corev1.PullIfNotPresent,
+							ImagePullPolicy: imagePullPolicy(image),
 							SecurityContext: &corev1.SecurityContext{
 								RunAsUser:                func() *int64 { v := int64(1000); return &v }(),
 								RunAsGroup:               func() *int64 { v := int64(1000); return &v }(),
@@ -413,6 +424,60 @@ func RestartDeployment(ctx context.Context, botID string) error {
 	}
 
 	return nil
+}
+
+// UpdateDeploymentImage updates the container image and triggers a rolling update
+func UpdateDeploymentImage(ctx context.Context, botID, newImage string) error {
+	client := GetClient()
+	namespace := GetNamespace()
+	deploymentName := GetDeploymentName(botID)
+
+	deployment, err := client.AppsV1().Deployments(namespace).Get(ctx, deploymentName, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to get deployment: %w", err)
+	}
+
+	// Update image for the openclaw container
+	for i := range deployment.Spec.Template.Spec.Containers {
+		if deployment.Spec.Template.Spec.Containers[i].Name == "openclaw" {
+			deployment.Spec.Template.Spec.Containers[i].Image = newImage
+			deployment.Spec.Template.Spec.Containers[i].ImagePullPolicy = imagePullPolicy(newImage)
+			break
+		}
+	}
+
+	// Add restart annotation to trigger rollout
+	if deployment.Spec.Template.Annotations == nil {
+		deployment.Spec.Template.Annotations = make(map[string]string)
+	}
+	deployment.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"] = metav1.Now().Format("2006-01-02T15:04:05Z07:00")
+
+	_, err = client.AppsV1().Deployments(namespace).Update(ctx, deployment, metav1.UpdateOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to update deployment image: %w", err)
+	}
+
+	return nil
+}
+
+// GetDeploymentImage returns the current openclaw container image for a bot
+func GetDeploymentImage(ctx context.Context, botID string) (string, error) {
+	client := GetClient()
+	namespace := GetNamespace()
+	deploymentName := GetDeploymentName(botID)
+
+	deployment, err := client.AppsV1().Deployments(namespace).Get(ctx, deploymentName, metav1.GetOptions{})
+	if err != nil {
+		return "", fmt.Errorf("failed to get deployment: %w", err)
+	}
+
+	for _, c := range deployment.Spec.Template.Spec.Containers {
+		if c.Name == "openclaw" {
+			return c.Image, nil
+		}
+	}
+
+	return "", fmt.Errorf("openclaw container not found")
 }
 
 // UpdateDeploymentConfig updates the deployment with new config and triggers rolling update

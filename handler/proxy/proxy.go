@@ -52,8 +52,15 @@ func ProxyToBot(c echo.Context) error {
 		return util.InternalError(c, "failed to get bot")
 	}
 
-	// Token is no longer auto-injected - user must provide correct token in URL
-	// This ensures only users with the access token can access the bot
+	// Only auto-approve if the request carries the correct access token
+	if token := c.QueryParam("token"); token != "" && token == bot.AccessToken {
+		go func() {
+			ctx := context.Background()
+			if err := k8s.AutoApproveAllPending(ctx, bot.ID, bot.AccessToken); err != nil {
+				fmt.Printf("[Proxy] Auto-approve failed for bot %s: %v\n", bot.ID, err)
+			}
+		}()
+	}
 
 	if bot.Status != model.BotStatusRunning {
 		return util.BadRequest(c, "bot is not running")

@@ -58,7 +58,8 @@ type ModelConfig struct {
 
 // AgentDefaults represents agent default configuration
 type AgentDefaults struct {
-	PrimaryModel string `json:"primary_model,omitempty"` // e.g., "anthropic/claude-sonnet-4-20250514"
+	PrimaryModel  string `json:"primary_model,omitempty"`  // e.g., "anthropic/claude-sonnet-4-20250514"
+	FallbackModel string `json:"fallback_model,omitempty"` // e.g., "anthropic/claude-haiku-4-5-20251001"
 }
 
 type BotConfig struct {
@@ -302,6 +303,14 @@ func ListBotsByAppAndUser(appID, userID string) ([]*Bot, error) {
 		query = query.Where("user_id = ?", userID)
 	}
 	if err := query.Order("created_at DESC").Find(&bots).Error; err != nil {
+		return nil, err
+	}
+	return bots, nil
+}
+
+func ListBotsByStatus(status BotStatus) ([]*Bot, error) {
+	var bots []*Bot
+	if err := util.GetDB().Where("status = ?", status).Find(&bots).Error; err != nil {
 		return nil, err
 	}
 	return bots, nil

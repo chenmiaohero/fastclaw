@@ -47,6 +47,12 @@ func convertToK8sConfig(bot *model.Bot, config *model.OpenClawConfig) *k8s.BotCo
 			k8sConfig.AgentDefaults = &k8s.AgentDefaultsConfig{
 				PrimaryModel: config.Agents.Defaults.Model.Primary,
 			}
+			// Convert fallback model
+			if config.Agents.Defaults.Models != nil {
+				if fallback, ok := config.Agents.Defaults.Models["fallback"]; ok {
+					k8sConfig.AgentDefaults.FallbackModel = fallback.Alias
+				}
+			}
 		}
 	}
 
@@ -105,7 +111,8 @@ func convertLegacyToK8sConfig(bot *model.Bot, config *model.BotConfig) *k8s.BotC
 	// Convert agent defaults
 	if config.AgentDefaults != nil {
 		k8sConfig.AgentDefaults = &k8s.AgentDefaultsConfig{
-			PrimaryModel: config.AgentDefaults.PrimaryModel,
+			PrimaryModel:  config.AgentDefaults.PrimaryModel,
+			FallbackModel: config.AgentDefaults.FallbackModel,
 		}
 	}
 

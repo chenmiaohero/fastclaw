@@ -135,12 +135,21 @@ func mergeConfigForModels(existing map[string]interface{}, config *BotConfig, se
 			defaultModel = config.AgentDefaults.PrimaryModel
 		}
 		if defaultModel != "" {
-			existing["agents"] = map[string]interface{}{
-				"defaults": map[string]interface{}{
-					"model": map[string]interface{}{
-						"primary": defaultModel,
-					},
+			defaults := map[string]interface{}{
+				"model": map[string]interface{}{
+					"primary": defaultModel,
 				},
+			}
+			// Set fallback model if provided
+			if config.AgentDefaults != nil && config.AgentDefaults.FallbackModel != "" {
+				defaults["models"] = map[string]interface{}{
+					"fallback": map[string]interface{}{
+						"alias": config.AgentDefaults.FallbackModel,
+					},
+				}
+			}
+			existing["agents"] = map[string]interface{}{
+				"defaults": defaults,
 			}
 		}
 	}
@@ -367,21 +376,35 @@ func buildOpenClawConfig(config *BotConfig, setDefaultModel bool) string {
 	}
 
 	if setDefaultModel && defaultModel != "" {
-		// Include agents.defaults to set fallback model for first-time users
-		return fmt.Sprintf(`{
-  %s,
-  "agents": {
+		// Build agents.defaults section
+		agentsSection := fmt.Sprintf(`"agents": {
     "defaults": {
       "model": {
         "primary": "%s"
-      }
+      }`, defaultModel)
+
+		// Add fallback model if provided
+		if config.AgentDefaults != nil && config.AgentDefaults.FallbackModel != "" {
+			agentsSection += fmt.Sprintf(`,
+      "models": {
+        "fallback": {
+          "alias": "%s"
+        }
+      }`, config.AgentDefaults.FallbackModel)
+		}
+
+		agentsSection += `
     }
-  },
+  }`
+
+		return fmt.Sprintf(`{
+  %s,
+  %s,
   "models": {
     "mode": "merge",
     "providers": %s
   }%s
-}`, gatewaySection, defaultModel, providersJSON, channelsSection)
+}`, gatewaySection, agentsSection, providersJSON, channelsSection)
 	}
 
 	// Only add providers, don't change user's default model

@@ -2,74 +2,56 @@ package k8s
 
 import (
 	"context"
-	"strings"
-	"time"
+	"encoding/json"
+	"fmt"
 )
 
-// StartAutoApprove starts auto-approval of pairing requests for a bot
-// This should be called after bot starts, regardless of config
-func StartAutoApprove(botID string) {
-	go func() {
-		ctx := context.Background()
-		// Wait for pod to be ready first
-		podName, err := waitForPodReady(ctx, botID, 120)
-		if err != nil {
-			return
-		}
-		autoApprovePairingRequests(botID, podName)
-	}()
+// pendingDeviceList represents the JSON output from openclaw devices list --json
+type pendingDeviceList struct {
+	Pending []struct {
+		RequestID string `json:"requestId"`
+		DeviceID  string `json:"deviceId"`
+		ClientMode string `json:"clientMode"`
+		IP        string `json:"ip"`
+	} `json:"pending"`
 }
 
-// autoApprovePairingRequests periodically checks and approves pending device pairing requests
-func autoApprovePairingRequests(botID, podName string) {
+// AutoApproveAllPending approves all pending device pairing requests for a bot.
+// Uses CLI commands via ExecInPod for reliability.
+func AutoApproveAllPending(ctx context.Context, botID, accessToken string) error {
 	namespace := GetNamespace()
-	ctx := context.Background()
 
-	// Check and approve for 5 minutes after bot starts
-	for i := 0; i < 60; i++ {
-		time.Sleep(5 * time.Second)
+	podName, err := GetPodName(ctx, botID)
+	if err != nil {
+		return fmt.Errorf("failed to get pod: %w", err)
+	}
 
-		// List pending pairing requests and approve all
-		output, err := ExecInPod(ctx, namespace, podName, "openclaw",
-			[]string{"node", "/app/openclaw.mjs", "devices", "list"})
+	// List pending devices via CLI
+	output, err := ExecInPod(ctx, namespace, podName, "openclaw",
+		[]string{"node", "/app/openclaw.mjs", "devices", "list", "--json", "--token", accessToken})
+	if err != nil {
+		return fmt.Errorf("failed to list devices: %w", err)
+	}
+
+	var deviceList pendingDeviceList
+	if err := json.Unmarshal([]byte(output), &deviceList); err != nil {
+		return fmt.Errorf("failed to parse devices: %w", err)
+	}
+
+	if len(deviceList.Pending) == 0 {
+		return nil
+	}
+
+	// Approve each pending device
+	for _, req := range deviceList.Pending {
+		_, err := ExecInPod(ctx, namespace, podName, "openclaw",
+			[]string{"node", "/app/openclaw.mjs", "devices", "approve", req.RequestID, "--token", accessToken})
 		if err != nil {
+			fmt.Printf("[AutoApprove] Failed to approve %s: %v\n", req.RequestID, err)
 			continue
 		}
-
-		// Parse output and approve pending requests
-		approvePendingDevices(ctx, namespace, podName, output)
+		fmt.Printf("[AutoApprove] Approved device %s (mode: %s, ip: %s)\n", req.DeviceID, req.ClientMode, req.IP)
 	}
-}
 
-// approvePendingDevices parses device list and approves pending ones
-func approvePendingDevices(ctx context.Context, namespace, podName, output string) {
-	lines := strings.Split(output, "\n")
-	inPendingSection := false
-
-	for _, line := range lines {
-		if strings.Contains(line, "Pending") {
-			inPendingSection = true
-			continue
-		}
-		if strings.Contains(line, "Paired") {
-			inPendingSection = false
-			continue
-		}
-
-		if !inPendingSection {
-			continue
-		}
-
-		// Look for UUID pattern (request ID) in the line
-		parts := strings.Split(line, "│")
-		for _, part := range parts {
-			part = strings.TrimSpace(part)
-			// UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-			if len(part) == 36 && strings.Count(part, "-") == 4 {
-				// This is a request ID, approve it
-				ExecInPod(ctx, namespace, podName, "openclaw",
-					[]string{"node", "/app/openclaw.mjs", "devices", "approve", part})
-			}
-		}
-	}
+	return nil
 }
