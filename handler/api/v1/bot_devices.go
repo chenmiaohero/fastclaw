@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fastclaw-ai/fastclaw/middleware"
+	"github.com/fastclaw-ai/fastclaw/model"
+	"github.com/fastclaw-ai/fastclaw/service/k8s"
+	"github.com/fastclaw-ai/fastclaw/util"
 	"github.com/labstack/echo/v4"
-	"github.com/workany-ai/clawork/middleware"
-	"github.com/workany-ai/clawork/model"
-	"github.com/workany-ai/clawork/service/k8s"
-	"github.com/workany-ai/clawork/util"
 )
 
 // DeviceInfo represents a device in the pairing list
@@ -88,8 +88,8 @@ func ListDevices(c echo.Context) error {
 		return util.Forbidden(c, "not authorized")
 	}
 
-	statusFilter := c.QueryParam("status")           // "pending", "paired", or empty for all
-	clientModeFilter := c.QueryParam("client_mode")  // "web", "cli", "desktop", etc.
+	statusFilter := c.QueryParam("status")          // "pending", "paired", or empty for all
+	clientModeFilter := c.QueryParam("client_mode") // "web", "cli", "desktop", etc.
 
 	if bot.Status != model.BotStatusRunning {
 		return util.BadRequest(c, "bot is not running")
@@ -358,4 +358,3 @@ func RevokeDevice(c echo.Context) error {
 		"output":    strings.TrimSpace(output),
 	})
 }
-

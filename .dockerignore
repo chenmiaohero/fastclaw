@@ -36,7 +36,7 @@ debug/
 *.test
 
 # Build artifacts (we build fresh in Docker)
-clawork
+fastclaw
 dist/
 build/
 bin/

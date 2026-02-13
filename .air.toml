@@ -4,8 +4,8 @@ tmp_dir = "tmp"
 
 [build]
   args_bin = []
-  bin = "./clawork"
-  cmd = "go build -o ./clawork ."
+  bin = "./fastclaw"
+  cmd = "go build -o ./fastclaw ."
   delay = 1000
   exclude_dir = ["assets", "tmp", "vendor", "testdata", "debug"]
   exclude_file = []

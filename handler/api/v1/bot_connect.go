@@ -4,23 +4,23 @@ import (
 	"context"
 	"strings"
 
+	"github.com/fastclaw-ai/fastclaw/middleware"
+	"github.com/fastclaw-ai/fastclaw/model"
+	"github.com/fastclaw-ai/fastclaw/service/k8s"
+	"github.com/fastclaw-ai/fastclaw/util"
 	"github.com/labstack/echo/v4"
 	"github.com/spf13/viper"
-	"github.com/workany-ai/clawork/middleware"
-	"github.com/workany-ai/clawork/model"
-	"github.com/workany-ai/clawork/service/k8s"
-	"github.com/workany-ai/clawork/util"
 )
 
 type BotConnectResponse struct {
-	ID          string          `json:"id"`
-	Name        string          `json:"name"`
-	Status      model.BotStatus `json:"status"`
-	Ready       bool            `json:"ready"`
-	Token       string          `json:"token,omitempty"`
-	Endpoint    string          `json:"endpoint,omitempty"`
-	WsURL       string          `json:"ws_url,omitempty"`
-	WebChatURL  string          `json:"webchat_url,omitempty"`
+	ID         string          `json:"id"`
+	Name       string          `json:"name"`
+	Status     model.BotStatus `json:"status"`
+	Ready      bool            `json:"ready"`
+	Token      string          `json:"token,omitempty"`
+	Endpoint   string          `json:"endpoint,omitempty"`
+	WsURL      string          `json:"ws_url,omitempty"`
+	WebChatURL string          `json:"webchat_url,omitempty"`
 }
 
 func GetBotConnect(c echo.Context) error {
@@ -67,9 +67,6 @@ func GetBotConnect(c echo.Context) error {
 			domainTemplate = app.BotDomainTemplate
 		} else {
 			domainTemplate = viper.GetString("domain.bot_domain_template")
-		}
-		if domainTemplate == "" {
-			domainTemplate = "http://{service_name}.{namespace}.orb.local:18789"
 		}
 
 		// Replace placeholders

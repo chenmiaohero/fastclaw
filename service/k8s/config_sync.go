@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/workany-ai/clawork/model"
+	"github.com/fastclaw-ai/fastclaw/model"
 )
 
 // ReadOpenClawConfig reads the openclaw.json config from the pod

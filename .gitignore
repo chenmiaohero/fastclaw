@@ -1,5 +1,5 @@
 # Binaries
-clawork
+fastclaw
 *.exe
 *.exe~
 *.dll
@@ -77,7 +77,7 @@ temp/
 deploy/postgres.yaml
 deploy/configmap.yaml
 deploy/ingress.yaml
-deploy/clawork.yaml
+deploy/fastclaw.yaml
 deploy/secrets.yaml
 !deploy/*.example.yaml
 

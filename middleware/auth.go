@@ -3,10 +3,10 @@ package middleware
 import (
 	"strings"
 
+	"github.com/fastclaw-ai/fastclaw/model"
+	"github.com/fastclaw-ai/fastclaw/util"
 	"github.com/labstack/echo/v4"
 	"github.com/spf13/viper"
-	"github.com/workany-ai/clawork/model"
-	"github.com/workany-ai/clawork/util"
 	"gorm.io/gorm"
 )
 

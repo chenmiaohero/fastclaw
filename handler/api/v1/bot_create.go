@@ -5,11 +5,11 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/fastclaw-ai/fastclaw/middleware"
+	"github.com/fastclaw-ai/fastclaw/model"
+	"github.com/fastclaw-ai/fastclaw/util"
 	"github.com/labstack/echo/v4"
 	"github.com/spf13/viper"
-	"github.com/workany-ai/clawork/middleware"
-	"github.com/workany-ai/clawork/model"
-	"github.com/workany-ai/clawork/util"
 )
 
 type CreateBotRequest struct {
@@ -94,7 +94,7 @@ func isValidSlug(slug string) bool {
 func buildAccessURL(slug, token string) string {
 	domain := viper.GetString("domain.bot_domain_suffix")
 	if domain == "" {
-		domain = "workany.bot"
+		domain = "fastclaw.ai"
 	}
 	url := fmt.Sprintf("https://%s.%s", slug, domain)
 	if token != "" {

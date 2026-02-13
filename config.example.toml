@@ -2,75 +2,34 @@
 port = 18080
 
 [api]
-# API Bearer Token 认证 (可选，兼容旧版本)
-# 如果设置，所有 API 请求需要携带 Authorization: Bearer <token>
-# 新版本推荐使用 apps 表管理多租户 token
-# 留空则不启用认证（仅用于开发环境）
-token = ""
-
-# 管理员 Token (用于管理 apps)
-# 设置后可以通过 /bot/api/v1/admin/* 路由管理应用
-admin_token = ""
+admin_token = "your-admin-token"
 
 [db]
 host = "localhost"
 port = 5432
 user = "postgres"
-password = "postgres"
-database = "clawork"
+password = "your-password"
+database = "fastclaw"
 sslmode = "disable"
 timezone = "Asia/Shanghai"
 
 [kubernetes]
-# 留空使用 in-cluster config 或 ~/.kube/config
-kubeconfig = ""
-namespace = "workany"
-# 本地开发模式：使用 .orb.local 访问 K8s 服务
-# 线上设为 false，使用 .svc.cluster.local
-local_dev = false
+kubeconfig = ""  # Empty for in-cluster config
+namespace = "fastclaw"
 
 [storage]
-# 共享 PVC 名称
-pvc_name = "clawork-shared-data"
-# NAS 挂载的基础路径 (Pod 内)
-base_path = "/clawork-data"
+pvc_name = "fastclaw-shared-data"
+base_path = "/fastclaw-data"
 
 [domain]
-# 主域名 (用于 API)
-api_domain = "workany.ai"
-# Bot 子域名后缀 (用于 WebChat)
-bot_domain_suffix = "workany.bot"
-# Bot 访问域名模板 (用于返回给客户端)
-bot_domain_template = "https://{bot_id}.workany.bot"
+api_domain = "fastclaw.ai"
+bot_domain_suffix = "fastclaw.ai"
+bot_domain_template = "https://{bot_id}.fastclaw.ai"
 
 [openclaw]
-# 默认镜像
 image = "1panel/openclaw:latest"
-# 私有镜像仓库认证 Secret 名称 (可选)
-# 如果使用私有镜像仓库，需要先创建 Secret：
-# kubectl create secret docker-registry acr-secret \
-#   --docker-server=registry.cn-hangzhou.aliyuncs.com \
-#   --docker-username=your-username \
-#   --docker-password=your-password \
-#   -n workany
-image_pull_secret = ""
-# Gateway 端口
 gateway_port = 18789
-# Node.js 堆内存大小 (MB)，建议为 memory_limit 的 75%
-node_max_old_space_size = 3072
-# 默认资源限制
 cpu_limit = "2000m"
 memory_limit = "4Gi"
 cpu_request = "500m"
 memory_request = "1Gi"
-# 容器临时存储限制 (限制 AI 在容器可写层写入的总量，如 pip 包、临时文件等)
-# 超限后 Pod 会被驱逐并重建
-ephemeral_storage_limit = "1Gi"
-# 以下 gateway 配置为可选项，不配置时 OpenClaw 使用默认行为（允许所有 origin）
-# 仅在需要精确控制时才配置这些选项
-#
-# 信任的代理 IP 地址列表 (用于正确获取客户端真实 IP)
-# trusted_proxies = ["10.42.0.1", "192.168.1.1"]
-#
-# 允许的 WebSocket Origin 列表 (用于 OpenClaw WebUI 访问)
-# allowed_origins = ["https://*.workany.loc", "https://*.workany.bot"]

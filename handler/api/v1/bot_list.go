@@ -1,10 +1,10 @@
 package v1
 
 import (
+	"github.com/fastclaw-ai/fastclaw/middleware"
+	"github.com/fastclaw-ai/fastclaw/model"
+	"github.com/fastclaw-ai/fastclaw/util"
 	"github.com/labstack/echo/v4"
-	"github.com/workany-ai/clawork/middleware"
-	"github.com/workany-ai/clawork/model"
-	"github.com/workany-ai/clawork/util"
 )
 
 func ListBots(c echo.Context) error {

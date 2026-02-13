@@ -3,11 +3,11 @@ package v1
 import (
 	"context"
 
+	"github.com/fastclaw-ai/fastclaw/middleware"
+	"github.com/fastclaw-ai/fastclaw/model"
+	"github.com/fastclaw-ai/fastclaw/service/k8s"
+	"github.com/fastclaw-ai/fastclaw/util"
 	"github.com/labstack/echo/v4"
-	"github.com/workany-ai/clawork/middleware"
-	"github.com/workany-ai/clawork/model"
-	"github.com/workany-ai/clawork/service/k8s"
-	"github.com/workany-ai/clawork/util"
 )
 
 type AddChannelRequest struct {
@@ -33,7 +33,6 @@ type AddChannelRequest struct {
 	// Extra config for any other fields
 	Extra map[string]interface{} `json:"extra,omitempty"`
 }
-
 
 // AddChannel adds an IM channel to a bot
 // POST /bots/:id/channels

@@ -9,11 +9,11 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/fastclaw-ai/fastclaw/model"
+	"github.com/fastclaw-ai/fastclaw/service/k8s"
+	"github.com/fastclaw-ai/fastclaw/util"
 	"github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
-	"github.com/workany-ai/clawork/model"
-	"github.com/workany-ai/clawork/service/k8s"
-	"github.com/workany-ai/clawork/util"
 	"gorm.io/gorm"
 )
 

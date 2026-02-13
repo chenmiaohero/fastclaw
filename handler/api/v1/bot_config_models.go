@@ -3,21 +3,21 @@ package v1
 import (
 	"context"
 
+	"github.com/fastclaw-ai/fastclaw/middleware"
+	"github.com/fastclaw-ai/fastclaw/model"
+	"github.com/fastclaw-ai/fastclaw/service/k8s"
+	"github.com/fastclaw-ai/fastclaw/util"
 	"github.com/labstack/echo/v4"
-	"github.com/workany-ai/clawork/middleware"
-	"github.com/workany-ai/clawork/model"
-	"github.com/workany-ai/clawork/service/k8s"
-	"github.com/workany-ai/clawork/util"
 )
 
 // ProviderRequest represents a request to add/update a provider
 type ProviderRequest struct {
-	Name    string                       `json:"name"`
-	BaseURL string                       `json:"baseUrl,omitempty"`
-	APIKey  string                       `json:"apiKey,omitempty"`
-	Auth    string                       `json:"auth,omitempty"`
-	API     string                       `json:"api,omitempty"`
-	Models  []model.ProviderModelConfig  `json:"models,omitempty"`
+	Name    string                      `json:"name"`
+	BaseURL string                      `json:"baseUrl,omitempty"`
+	APIKey  string                      `json:"apiKey,omitempty"`
+	Auth    string                      `json:"auth,omitempty"`
+	API     string                      `json:"api,omitempty"`
+	Models  []model.ProviderModelConfig `json:"models,omitempty"`
 }
 
 // ListModelProviders returns all model providers for a bot

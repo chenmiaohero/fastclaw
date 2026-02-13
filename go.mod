@@ -1,4 +1,4 @@
-module github.com/workany-ai/clawork
+module github.com/fastclaw-ai/fastclaw
 
 go 1.24.0
 

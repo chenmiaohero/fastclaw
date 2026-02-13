@@ -1,8 +1,8 @@
 package v1
 
 import (
-	"github.com/workany-ai/clawork/model"
-	"github.com/workany-ai/clawork/service/k8s"
+	"github.com/fastclaw-ai/fastclaw/model"
+	"github.com/fastclaw-ai/fastclaw/service/k8s"
 )
 
 // convertToK8sConfig converts model.OpenClawConfig to k8s.BotConfig

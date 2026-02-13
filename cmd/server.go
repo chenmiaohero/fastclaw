@@ -6,14 +6,14 @@ import (
 	"net"
 	"strings"
 
+	v1 "github.com/fastclaw-ai/fastclaw/handler/api/v1"
+	"github.com/fastclaw-ai/fastclaw/handler/proxy"
+	authmw "github.com/fastclaw-ai/fastclaw/middleware"
+	"github.com/fastclaw-ai/fastclaw/service/k8s"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	v1 "github.com/workany-ai/clawork/handler/api/v1"
-	"github.com/workany-ai/clawork/handler/proxy"
-	authmw "github.com/workany-ai/clawork/middleware"
-	"github.com/workany-ai/clawork/service/k8s"
 )
 
 var serverCmd = &cobra.Command{
@@ -63,8 +63,6 @@ func startServer() {
 			}
 
 			// Extract first subdomain segment as bot ID
-			// e.g., "abc123.skillsbot.loc" -> "abc123"
-			// e.g., "abc123.workany.loc" -> "abc123"
 			if dotIdx := strings.Index(host, "."); dotIdx > 0 {
 				botID := host[:dotIdx]
 				if botID != "" {
@@ -163,7 +161,7 @@ func startServer() {
 		return c.JSON(200, map[string]string{"status": "ok"})
 	})
 
-	// Bot proxy routes (for {bot_id}.workany.loc/*)
+	// Bot proxy routes (for {bot_id}.fastclaw.ai/*)
 	e.Any("/proxy/:bot_id", proxy.ProxyToBot)
 	e.Any("/proxy/:bot_id/*", proxy.ProxyToBot)
 
