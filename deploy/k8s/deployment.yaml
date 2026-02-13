@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastclaw
+  namespace: fastclaw
+  labels:
+    app: fastclaw
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fastclaw
+  template:
+    metadata:
+      labels:
+        app: fastclaw
+    spec:
+      serviceAccountName: fastclaw
+      containers:
+        - name: fastclaw
+          image: fastclaw:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 18080
+          env:
+            - name: FASTCLAW_API_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: fastclaw-secrets
+                  key: admin-token
+            - name: FASTCLAW_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: fastclaw-secrets
+                  key: db-password
+          volumeMounts:
+            - name: config
+              mountPath: /app/config.toml
+              subPath: config.toml
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 18080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 18080
+            initialDelaySeconds: 3
+            periodSeconds: 5
+      volumes:
+        - name: config
+          configMap:
+            name: fastclaw-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fastclaw
+  namespace: fastclaw
+spec:
+  selector:
+    app: fastclaw
+  ports:
+    - port: 18080
+      targetPort: 18080

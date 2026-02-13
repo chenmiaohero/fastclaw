@@ -72,14 +72,8 @@ temp/
 *.tar
 *.tar.gz
 
-# Deploy files with real values (copy from .example and modify)
-# Keep .example.yaml files, ignore actual yaml files with secrets
-deploy/postgres.yaml
-deploy/configmap.yaml
-deploy/ingress.yaml
-deploy/fastclaw.yaml
-deploy/secrets.yaml
-!deploy/*.example.yaml
+# Deploy secrets (never commit real secrets)
+deploy/k8s/secrets.yaml
 
 # Local development
 Caddyfile
@@ -91,6 +85,5 @@ Caddyfile
 coverage/
 *.coverprofile
 
-deploy*
 debug*
 *.txt

@@ -31,46 +31,59 @@ Kubernetes-native platform for managing and orchestrating [OpenClaw](https://git
 
 ## Prerequisites
 
-- Go 1.24+
-- PostgreSQL 14+
+- Go 1.24+ (for building from source)
 - Kubernetes cluster (1.28+) - locally via [OrbStack](https://orbstack.dev/) or Docker Desktop
-- `kubectl` configured with a valid kubeconfig
+- `kubectl` and optionally `helm` (v3)
 
 > FastClaw does **not** need to run inside the K8s cluster. It only needs a kubeconfig that can reach the cluster API.
 
 ## Quick Start
 
-### 1. Prepare K8s
+### Option A: Helm Install (recommended)
+
+One command to deploy everything (FastClaw + PostgreSQL + RBAC) into your K8s cluster:
 
 ```bash
-kubectl create namespace fastclaw
-
-kubectl apply -f - <<EOF
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: fastclaw-shared-data
-  namespace: fastclaw
-spec:
-  accessModes: [ ReadWriteOnce ]
-  resources:
-    requests:
-      storage: 10Gi
-EOF
+helm install fastclaw deploy/helm/fastclaw \
+  -n fastclaw --create-namespace \
+  --set adminToken="my-admin-token"
 ```
 
-### 2. Prepare PostgreSQL
+Verify:
 
 ```bash
-docker run -d --name fastclaw-pg \
-  -e POSTGRES_DB=fastclaw \
-  -e POSTGRES_USER=postgres \
-  -e POSTGRES_PASSWORD=postgres \
-  -p 5432:5432 \
-  postgres:16
+kubectl -n fastclaw get pods
+kubectl -n fastclaw port-forward svc/fastclaw 18080:18080
+curl http://localhost:18080/health
 ```
 
-### 3. Build and configure
+See [Helm values](#helm-chart) for full configuration options.
+
+### Option B: kubectl Apply
+
+```bash
+# Create namespace and RBAC
+kubectl apply -f deploy/k8s/namespace.yaml
+kubectl apply -f deploy/k8s/rbac.yaml
+kubectl apply -f deploy/k8s/pvc.yaml
+
+# Create secrets (edit first!)
+cp deploy/k8s/secrets.yaml.example deploy/k8s/secrets.yaml
+# edit deploy/k8s/secrets.yaml with your tokens/passwords
+kubectl apply -f deploy/k8s/secrets.yaml
+
+# Deploy PostgreSQL and FastClaw
+kubectl apply -f deploy/k8s/postgres.yaml
+kubectl apply -f deploy/k8s/configmap.yaml
+kubectl apply -f deploy/k8s/deployment.yaml
+
+# Port-forward to access locally
+kubectl -n fastclaw port-forward svc/fastclaw 18080:18080
+```
+
+### Option C: Local Binary
+
+Run FastClaw on your host, connecting to a K8s cluster via kubeconfig.
 
 ```bash
 git clone https://github.com/fastclaw-ai/fastclaw.git
@@ -79,76 +92,56 @@ go build -o fastclaw .
 cp config.example.toml config.toml
 ```
 
-Minimal local dev config:
+Start a PostgreSQL instance:
+
+```bash
+docker run -d --name fastclaw-pg \
+  -e POSTGRES_DB=fastclaw \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -p 5432:5432 postgres:16
+```
+
+Prepare K8s namespace and storage:
+
+```bash
+kubectl create namespace fastclaw
+kubectl apply -f deploy/k8s/pvc.yaml
+```
+
+Edit `config.toml` - key settings for local dev:
 
 ```toml
-[server]
-port = 18080
+[kubernetes]
+local_dev = true    # use ClusterIP for direct pod access from host
 
 [api]
 admin_token = "my-admin-token"
-
-[db]
-host = "localhost"
-port = 5432
-user = "postgres"
-password = "postgres"
-database = "fastclaw"
-sslmode = "disable"
-timezone = "Asia/Shanghai"
-
-[kubernetes]
-kubeconfig = ""        # leave empty to use ~/.kube/config
-namespace = "fastclaw"
-local_dev = true       # use ClusterIP for direct pod access from host
-
-[storage]
-pvc_name = "fastclaw-shared-data"
-base_path = "/fastclaw-data"
-
-[domain]
-api_domain = "fastclaw.ai"
-bot_domain_suffix = "fastclaw.ai"
-bot_domain_template = "https://{bot_id}.fastclaw.ai"
-
-[openclaw]
-image = "1panel/openclaw:latest"
-gateway_port = 18789
-cpu_limit = "2000m"
-memory_limit = "4Gi"
-cpu_request = "500m"
-memory_request = "1Gi"
 ```
 
-### 4. Start the server
+Run:
 
 ```bash
 ./fastclaw server
-
-# Verify
 curl http://localhost:18080/health
 ```
 
-### 5. Create an App (get API token)
+### Create Your First Bot
 
-Each App has its own API token used to authenticate all bot operations.
+Once the server is running (via any option above):
 
 ```bash
-curl -X POST http://localhost:18080/bot/api/v1/admin/apps \
+# 1. Create an App (each app gets its own API token)
+curl -s -X POST http://localhost:18080/bot/api/v1/admin/apps \
   -H "Authorization: Bearer my-admin-token" \
   -H "Content-Type: application/json" \
   -d '{"name": "my-app"}'
-```
+# Save the api_token from the response
 
-Save the `api_token` from the response.
+export API_TOKEN="<api_token>"
 
-### 6. Create and start a Bot
-
-```bash
-export API_TOKEN="<api_token from step 5>"
-
-# Create
-curl -X POST http://localhost:18080/bot/api/v1/bots \
+# 2. Create a Bot
+curl -s -X POST http://localhost:18080/bot/api/v1/bots \
   -H "Authorization: Bearer $API_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -161,38 +154,95 @@ curl -X POST http://localhost:18080/bot/api/v1/bots \
     }
   }'
 
-export BOT_ID="<id from response>"
+export BOT_ID="<id>"
 
-# Start (creates K8s Deployment + Service)
+# 3. Start the Bot (creates K8s Deployment + Service)
 curl -X POST http://localhost:18080/bot/api/v1/bots/$BOT_ID/start \
   -H "Authorization: Bearer $API_TOKEN"
 
-# Check status
+# 4. Check status
 curl http://localhost:18080/bot/api/v1/bots/$BOT_ID/status \
   -H "Authorization: Bearer $API_TOKEN"
 
-# Get connection info
-curl http://localhost:18080/bot/api/v1/bots/$BOT_ID/connect \
-  -H "Authorization: Bearer $API_TOKEN"
-
-# Access via proxy
+# 5. Access via proxy
 curl http://localhost:18080/proxy/$BOT_ID/
+
+# Stop / Restart / Delete
+curl -X POST http://localhost:18080/bot/api/v1/bots/$BOT_ID/stop -H "Authorization: Bearer $API_TOKEN"
+curl -X POST http://localhost:18080/bot/api/v1/bots/$BOT_ID/restart -H "Authorization: Bearer $API_TOKEN"
+curl -X DELETE http://localhost:18080/bot/api/v1/bots/$BOT_ID -H "Authorization: Bearer $API_TOKEN"
 ```
 
-### 7. Manage the Bot
+## Deployment
+
+### Helm Chart
 
 ```bash
-# Stop
-curl -X POST http://localhost:18080/bot/api/v1/bots/$BOT_ID/stop \
-  -H "Authorization: Bearer $API_TOKEN"
+helm install fastclaw deploy/helm/fastclaw \
+  -n fastclaw --create-namespace \
+  --set adminToken="my-secret-token"
+```
 
-# Restart
-curl -X POST http://localhost:18080/bot/api/v1/bots/$BOT_ID/restart \
-  -H "Authorization: Bearer $API_TOKEN"
+Key values (`deploy/helm/fastclaw/values.yaml`):
 
-# Delete (also cleans up K8s resources)
-curl -X DELETE http://localhost:18080/bot/api/v1/bots/$BOT_ID \
-  -H "Authorization: Bearer $API_TOKEN"
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `adminToken` | `change-me` | Admin API token |
+| `server.image.repository` | `fastclaw` | FastClaw image |
+| `server.image.tag` | `latest` | Image tag |
+| `server.replicas` | `1` | Number of replicas |
+| `postgresql.enabled` | `true` | Deploy built-in PostgreSQL |
+| `postgresql.auth.password` | `postgres` | DB password |
+| `externalDatabase.host` | `""` | External DB host (when `postgresql.enabled=false`) |
+| `storage.size` | `10Gi` | Shared PVC size for bot data |
+| `openclaw.image` | `1panel/openclaw:latest` | OpenClaw bot image |
+| `openclaw.cpuLimit` | `2000m` | Bot CPU limit |
+| `openclaw.memoryLimit` | `4Gi` | Bot memory limit |
+| `domain.botDomainSuffix` | `fastclaw.ai` | Bot subdomain suffix |
+| `ingress.enabled` | `false` | Enable ingress |
+
+Use an external database:
+
+```bash
+helm install fastclaw deploy/helm/fastclaw \
+  -n fastclaw --create-namespace \
+  --set adminToken="my-token" \
+  --set postgresql.enabled=false \
+  --set externalDatabase.host="db.example.com" \
+  --set externalDatabase.password="secret"
+```
+
+Upgrade:
+
+```bash
+helm upgrade fastclaw deploy/helm/fastclaw -n fastclaw
+```
+
+Uninstall:
+
+```bash
+helm uninstall fastclaw -n fastclaw
+```
+
+### Raw K8s Manifests
+
+All manifests are in `deploy/k8s/`:
+
+| File | Description |
+|------|-------------|
+| `namespace.yaml` | Namespace |
+| `rbac.yaml` | ServiceAccount, Role, RoleBinding |
+| `pvc.yaml` | Shared storage for bot data |
+| `postgres.yaml` | PostgreSQL Deployment + Service |
+| `secrets.yaml.example` | Secret template (copy and edit) |
+| `configmap.yaml` | FastClaw config.toml |
+| `deployment.yaml` | FastClaw Deployment + Service |
+
+### Docker
+
+```bash
+docker build -t fastclaw:latest .
+docker run -p 18080:18080 -v ./config.toml:/app/config.toml fastclaw:latest
 ```
 
 ## API Reference
@@ -292,19 +342,6 @@ GET /health
 | WS     | `/proxy/:bot_id/*` | WebSocket proxy       |
 
 Subdomain routing: `{bot-id}.{bot_domain_suffix}/*` routes to the corresponding bot automatically.
-
-## Deployment
-
-### Docker
-
-```bash
-docker build -t fastclaw:latest .
-docker run -p 18080:18080 -v ./config.toml:/app/config.toml fastclaw:latest
-```
-
-### Kubernetes
-
-See [deploy/](deploy/) directory for examples.
 
 ## License
 
