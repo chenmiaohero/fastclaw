@@ -87,7 +87,68 @@ func WriteOpenClawConfigToPod(ctx context.Context, botID string, config *model.O
 	return nil
 }
 
-// SyncConfigToPod reads config from database and writes to pod
+// SyncSectionsToPod reads existing config from the pod, merges only the specified
+// sections from the database, and writes back. Gateway config is never touched,
+// so openclaw's hot-reload won't restart the gateway process.
+func SyncSectionsToPod(ctx context.Context, botID string, sections ...string) error {
+	namespace := GetNamespace()
+
+	podName, err := waitForPodReady(ctx, botID, 60)
+	if err != nil {
+		return fmt.Errorf("failed to get pod: %w", err)
+	}
+
+	// Read existing config from pod (preserves gateway and other untouched sections)
+	podConfig, err := readExistingConfig(ctx, namespace, podName)
+	if err != nil {
+		podConfig = make(map[string]interface{})
+	}
+
+	// Get config from database
+	bot, err := model.GetBotByID(botID)
+	if err != nil {
+		return fmt.Errorf("failed to get bot: %w", err)
+	}
+	dbConfig, err := bot.GetOpenClawConfig()
+	if err != nil {
+		return fmt.Errorf("failed to get config: %w", err)
+	}
+
+	// Marshal DB config to a generic map
+	dbJSON, err := json.Marshal(dbConfig)
+	if err != nil {
+		return fmt.Errorf("failed to marshal db config: %w", err)
+	}
+	var dbMap map[string]interface{}
+	if err := json.Unmarshal(dbJSON, &dbMap); err != nil {
+		return fmt.Errorf("failed to unmarshal db config: %w", err)
+	}
+
+	// Only merge the specified sections, leave everything else untouched
+	for _, section := range sections {
+		if val, ok := dbMap[section]; ok {
+			podConfig[section] = val
+		}
+	}
+
+	// Write merged config back to pod
+	configJSON, err := json.MarshalIndent(podConfig, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	command := []string{"sh", "-c", fmt.Sprintf("cat > /home/node/.openclaw/openclaw.json << 'EOFCONFIG'\n%s\nEOFCONFIG", string(configJSON))}
+	_, err = ExecInPod(ctx, namespace, podName, "openclaw", command)
+	if err != nil {
+		return fmt.Errorf("failed to write config: %w", err)
+	}
+
+	return nil
+}
+
+// SyncConfigToPod reads config from database and writes the full config to pod.
+// This includes gateway config and should only be used when gateway changes are intended
+// (e.g., token reset, initial setup).
 func SyncConfigToPod(ctx context.Context, botID string) error {
 	// Get bot from database
 	bot, err := model.GetBotByID(botID)
@@ -146,9 +207,9 @@ func UpdateModelsConfig(ctx context.Context, botID string, modelsConfig *model.M
 		return fmt.Errorf("failed to update bot: %w", err)
 	}
 
-	// If bot is running, sync to pod
+	// If bot is running, sync only models section to pod (don't touch gateway)
 	if bot.Status == model.BotStatusRunning {
-		return SyncConfigToPod(ctx, botID)
+		return SyncSectionsToPod(ctx, botID, "models")
 	}
 
 	return nil
@@ -179,9 +240,9 @@ func UpdateAgentsConfig(ctx context.Context, botID string, agentsConfig *model.A
 		return fmt.Errorf("failed to update bot: %w", err)
 	}
 
-	// If bot is running, sync to pod
+	// If bot is running, sync only agents section to pod (don't touch gateway)
 	if bot.Status == model.BotStatusRunning {
-		return SyncConfigToPod(ctx, botID)
+		return SyncSectionsToPod(ctx, botID, "agents")
 	}
 
 	return nil
@@ -212,9 +273,9 @@ func UpdateChannelsConfig(ctx context.Context, botID string, channelsConfig mode
 		return fmt.Errorf("failed to update bot: %w", err)
 	}
 
-	// If bot is running, sync to pod
+	// If bot is running, sync only channels section to pod (don't touch gateway)
 	if bot.Status == model.BotStatusRunning {
-		return SyncConfigToPod(ctx, botID)
+		return SyncSectionsToPod(ctx, botID, "channels")
 	}
 
 	return nil
@@ -251,9 +312,9 @@ func AddChannel(ctx context.Context, botID, channelName string, channelConfig *m
 		return fmt.Errorf("failed to update bot: %w", err)
 	}
 
-	// If bot is running, sync to pod
+	// If bot is running, sync only channels section to pod (don't touch gateway)
 	if bot.Status == model.BotStatusRunning {
-		return SyncConfigToPod(ctx, botID)
+		return SyncSectionsToPod(ctx, botID, "channels")
 	}
 
 	return nil
@@ -286,9 +347,9 @@ func RemoveChannel(ctx context.Context, botID, channelName string) error {
 		return fmt.Errorf("failed to update bot: %w", err)
 	}
 
-	// If bot is running, sync to pod
+	// If bot is running, sync only channels section to pod (don't touch gateway)
 	if bot.Status == model.BotStatusRunning {
-		return SyncConfigToPod(ctx, botID)
+		return SyncSectionsToPod(ctx, botID, "channels")
 	}
 
 	return nil
@@ -330,9 +391,9 @@ func AddOrUpdateProvider(ctx context.Context, botID, providerName string, provid
 		return fmt.Errorf("failed to update bot: %w", err)
 	}
 
-	// If bot is running, sync to pod
+	// If bot is running, sync only models section to pod (don't touch gateway)
 	if bot.Status == model.BotStatusRunning {
-		return SyncConfigToPod(ctx, botID)
+		return SyncSectionsToPod(ctx, botID, "models")
 	}
 
 	return nil
@@ -365,9 +426,9 @@ func RemoveProvider(ctx context.Context, botID, providerName string) error {
 		return fmt.Errorf("failed to update bot: %w", err)
 	}
 
-	// If bot is running, sync to pod
+	// If bot is running, sync only models section to pod (don't touch gateway)
 	if bot.Status == model.BotStatusRunning {
-		return SyncConfigToPod(ctx, botID)
+		return SyncSectionsToPod(ctx, botID, "models")
 	}
 
 	return nil
@@ -409,9 +470,9 @@ func SetDefaultModel(ctx context.Context, botID, primaryModel string) error {
 		return fmt.Errorf("failed to update bot: %w", err)
 	}
 
-	// If bot is running, sync to pod
+	// If bot is running, sync only agents section to pod (don't touch gateway)
 	if bot.Status == model.BotStatusRunning {
-		return SyncConfigToPod(ctx, botID)
+		return SyncSectionsToPod(ctx, botID, "agents")
 	}
 
 	return nil

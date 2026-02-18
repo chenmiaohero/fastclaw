@@ -97,11 +97,11 @@ func AddModelProvider(c echo.Context) error {
 		return util.InternalError(c, "failed to update bot")
 	}
 
-	// Sync to pod if bot is running
+	// Sync only models section to pod if bot is running (don't touch gateway)
 	if bot.Status == model.BotStatusRunning {
 		go func() {
 			ctx := context.Background()
-			if err := k8s.SyncConfigToPod(ctx, bot.ID); err != nil {
+			if err := k8s.SyncSectionsToPod(ctx, bot.ID, "models"); err != nil {
 				c.Logger().Errorf("failed to sync config to pod: %v", err)
 			}
 		}()
@@ -191,11 +191,11 @@ func UpdateModelProvider(c echo.Context) error {
 		return util.InternalError(c, "failed to update bot")
 	}
 
-	// Sync to pod if bot is running
+	// Sync only models section to pod if bot is running (don't touch gateway)
 	if bot.Status == model.BotStatusRunning {
 		go func() {
 			ctx := context.Background()
-			if err := k8s.SyncConfigToPod(ctx, bot.ID); err != nil {
+			if err := k8s.SyncSectionsToPod(ctx, bot.ID, "models"); err != nil {
 				c.Logger().Errorf("failed to sync config to pod: %v", err)
 			}
 		}()
@@ -241,11 +241,11 @@ func DeleteModelProvider(c echo.Context) error {
 		return util.InternalError(c, "failed to update bot")
 	}
 
-	// Sync to pod if bot is running
+	// Sync only models section to pod if bot is running (don't touch gateway)
 	if bot.Status == model.BotStatusRunning {
 		go func() {
 			ctx := context.Background()
-			if err := k8s.SyncConfigToPod(ctx, bot.ID); err != nil {
+			if err := k8s.SyncSectionsToPod(ctx, bot.ID, "models"); err != nil {
 				c.Logger().Errorf("failed to sync config to pod: %v", err)
 			}
 		}()
