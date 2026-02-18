@@ -203,7 +203,7 @@ func CreateDeployment(ctx context.Context, botID, userID, accessToken string, co
 								},
 							},
 							// Write full config file before starting gateway
-							// Uses "openclaw" wrapper which prefers PVC-installed version over built-in
+							// Uses "openclaw" wrapper: prefers PVC-installed openclaw.mjs, falls back to built-in
 							Command: func() []string {
 								if config != nil && config.AccessToken != "" {
 									// Generate full config JSON (including models) and write before starting gateway
