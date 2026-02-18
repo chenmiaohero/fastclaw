@@ -29,4 +29,4 @@ USER node
 # PVC-backed working directory for skills, plugins, and user-installed packages
 ENV CLAWHUB_WORKDIR="/home/node/.openclaw"
 ENV NPM_CONFIG_PREFIX="/home/node/.openclaw/npm"
-ENV PATH="/home/node/.openclaw/npm/bin:$PATH"
+ENV PATH="$PATH:/home/node/.openclaw/npm/bin"
