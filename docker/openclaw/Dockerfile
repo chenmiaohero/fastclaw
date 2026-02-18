@@ -15,9 +15,11 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/b
 # Wrapper script: prefer PVC-installed openclaw over built-in version
 # Users can upgrade via "npm i -g openclaw" inside the container,
 # the new version is installed to PVC-backed npm prefix and persists across restarts.
+# NOTE: "gateway" subcommand always uses the built-in Docker-optimized version,
+# because the npm-distributed openclaw expects systemd which is unavailable in containers.
 RUN printf '#!/bin/sh\n\
 LOCAL_BIN="$HOME/.openclaw/npm/bin/openclaw"\n\
-if [ -x "$LOCAL_BIN" ]; then\n\
+if [ "$1" != "gateway" ] && [ -x "$LOCAL_BIN" ]; then\n\
   exec "$LOCAL_BIN" "$@"\n\
 fi\n\
 exec node /app/openclaw.mjs "$@"\n' > /usr/local/bin/openclaw && chmod +x /usr/local/bin/openclaw
