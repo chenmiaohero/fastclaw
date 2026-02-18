@@ -10,19 +10,21 @@ ENV UV_PYTHON_INSTALL_DIR=/usr/local/share/uv/python
 RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh && \
     uv python install 3.12 && \
     ln -sf /usr/bin/python3 /usr/local/bin/python && \
-    printf '#!/bin/sh\nnode /app/openclaw.mjs "$@"\n' > /usr/local/bin/openclaw && chmod +x /usr/local/bin/openclaw && \
     npm install -g clawhub
 
-# Add more plugins here as needed:
-# RUN cd /tmp && \
-#     npm pack @some-scope/another-plugin && \
-#     mkdir -p /app/extensions/another-plugin && \
-#     tar -xzf *.tgz -C /app/extensions/another-plugin --strip-components=1 && \
-#     cd /app/extensions/another-plugin && npm install --omit=dev && \
-#     rm -f /tmp/*.tgz && \
-#     chown -R node:node /app/extensions/another-plugin
+# Wrapper script: prefer PVC-installed openclaw over built-in version
+# Users can upgrade via "npm i -g openclaw" inside the container,
+# the new version is installed to PVC-backed npm prefix and persists across restarts.
+RUN printf '#!/bin/sh\n\
+LOCAL_BIN="$HOME/.openclaw/npm/bin/openclaw"\n\
+if [ -x "$LOCAL_BIN" ]; then\n\
+  exec "$LOCAL_BIN" "$@"\n\
+fi\n\
+exec node /app/openclaw.mjs "$@"\n' > /usr/local/bin/openclaw && chmod +x /usr/local/bin/openclaw
 
 USER node
 
-# clawhub installs skills to PVC-backed directory
+# PVC-backed working directory for skills, plugins, and user-installed packages
 ENV CLAWHUB_WORKDIR="/home/node/.openclaw"
+ENV NPM_CONFIG_PREFIX="/home/node/.openclaw/npm"
+ENV PATH="/home/node/.openclaw/npm/bin:$PATH"

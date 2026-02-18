@@ -203,6 +203,7 @@ func CreateDeployment(ctx context.Context, botID, userID, accessToken string, co
 								},
 							},
 							// Write full config file before starting gateway
+							// Uses "openclaw" wrapper which prefers PVC-installed version over built-in
 							Command: func() []string {
 								if config != nil && config.AccessToken != "" {
 									// Generate full config JSON (including models) and write before starting gateway
@@ -210,9 +211,9 @@ func CreateDeployment(ctx context.Context, botID, userID, accessToken string, co
 									return []string{"sh", "-c", fmt.Sprintf(`cat > /home/node/.openclaw/openclaw.json << 'EOFCONFIG'
 %s
 EOFCONFIG
-node /app/openclaw.mjs gateway --port %d --bind lan --allow-unconfigured --dev`, configJSON, gatewayPort)}
+exec openclaw gateway --port %d --bind lan --allow-unconfigured --dev`, configJSON, gatewayPort)}
 								}
-								return []string{"node", "/app/openclaw.mjs", "gateway", "--port", fmt.Sprintf("%d", gatewayPort), "--bind", "lan", "--allow-unconfigured", "--dev"}
+								return []string{"openclaw", "gateway", "--port", fmt.Sprintf("%d", gatewayPort), "--bind", "lan", "--allow-unconfigured", "--dev"}
 							}(),
 							Env: func() []corev1.EnvVar {
 								envs := []corev1.EnvVar{

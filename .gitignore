@@ -87,3 +87,5 @@ coverage/
 
 debug*
 *.txt
+
+deploy.sh
