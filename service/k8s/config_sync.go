@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -88,20 +89,15 @@ func WriteOpenClawConfigToPod(ctx context.Context, botID string, config *model.O
 }
 
 // SyncSectionsToPod reads existing config from the pod, merges only the specified
-// sections from the database, and writes back. Gateway config is never touched,
-// so openclaw's hot-reload won't restart the gateway process.
+// sections from the database, and writes back. Uses node inside the pod to do the
+// merge so that JSON key ordering of unchanged sections (especially gateway) is
+// preserved, preventing openclaw's hot-reload from detecting a false gateway change.
 func SyncSectionsToPod(ctx context.Context, botID string, sections ...string) error {
 	namespace := GetNamespace()
 
 	podName, err := waitForPodReady(ctx, botID, 60)
 	if err != nil {
 		return fmt.Errorf("failed to get pod: %w", err)
-	}
-
-	// Read existing config from pod (preserves gateway and other untouched sections)
-	podConfig, err := readExistingConfig(ctx, namespace, podName)
-	if err != nil {
-		podConfig = make(map[string]interface{})
 	}
 
 	// Get config from database
@@ -114,7 +110,7 @@ func SyncSectionsToPod(ctx context.Context, botID string, sections ...string) er
 		return fmt.Errorf("failed to get config: %w", err)
 	}
 
-	// Marshal DB config to a generic map
+	// Marshal DB config to a generic map to extract sections
 	dbJSON, err := json.Marshal(dbConfig)
 	if err != nil {
 		return fmt.Errorf("failed to marshal db config: %w", err)
@@ -124,23 +120,35 @@ func SyncSectionsToPod(ctx context.Context, botID string, sections ...string) er
 		return fmt.Errorf("failed to unmarshal db config: %w", err)
 	}
 
-	// Only merge the specified sections, leave everything else untouched
+	// Build patch with only the specified sections
+	patch := make(map[string]interface{})
 	for _, section := range sections {
 		if val, ok := dbMap[section]; ok {
-			podConfig[section] = val
+			patch[section] = val
 		}
 	}
 
-	// Write merged config back to pod
-	configJSON, err := json.MarshalIndent(podConfig, "", "  ")
+	patchJSON, err := json.Marshal(patch)
 	if err != nil {
-		return fmt.Errorf("failed to marshal config: %w", err)
+		return fmt.Errorf("failed to marshal patch: %w", err)
 	}
 
-	command := []string{"sh", "-c", fmt.Sprintf("cat > /home/node/.openclaw/openclaw.json << 'EOFCONFIG'\n%s\nEOFCONFIG", string(configJSON))}
-	_, err = ExecInPod(ctx, namespace, podName, "openclaw", command)
+	// Base64 encode the patch to avoid shell escaping issues
+	patchB64 := base64.StdEncoding.EncodeToString(patchJSON)
+
+	// Use node inside the pod to merge. Node's JSON.parse preserves key ordering,
+	// so unchanged sections (gateway, channels, etc.) stay byte-for-byte identical.
+	nodeScript := fmt.Sprintf(
+		`const fs=require("fs");`+
+			`const p="/home/node/.openclaw/openclaw.json";`+
+			`let c={};try{c=JSON.parse(fs.readFileSync(p,"utf8"))}catch(e){}` +
+			`Object.assign(c,JSON.parse(Buffer.from("%s","base64").toString()));`+
+			`fs.writeFileSync(p,JSON.stringify(c,null,2)+"\n")`,
+		patchB64)
+
+	_, err = ExecInPod(ctx, namespace, podName, "openclaw", []string{"node", "-e", nodeScript})
 	if err != nil {
-		return fmt.Errorf("failed to write config: %w", err)
+		return fmt.Errorf("failed to sync sections: %w", err)
 	}
 
 	return nil
