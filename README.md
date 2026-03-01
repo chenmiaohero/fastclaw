@@ -16,18 +16,111 @@ Kubernetes-native platform for managing and orchestrating [OpenClaw](https://git
 ## Architecture
 
 ```
-┌──────────┐     ┌──────────┐     ┌──────────┐
-│  Client  │────▶│ FastClaw │────▶│   K8s    │
-└──────────┘     └─────┬────┘     └────┬─────┘
-                       │               │
-                 ┌─────┴─────┐    ┌────┴─────┐
-                 │ PostgreSQL│    │ OpenClaw  │
-                 └───────────┘    │   Pods   │
-                                  └────┬─────┘
-                            ┌──────────┼──────────┐
-                            │          │          │
-                       Gateway    IM Channels  Devices
+                              EXTERNAL CLIENTS
+                     (Browser / CLI / API consumers)
+                                    │
+                    ┌───────────────┴────────────────┐
+                    │     Caddy / Load Balancer       │
+                    │  *.fastclaw.ai  → :18080 (TLS) │
+                    └───────────────┬────────────────┘
+                                    │
+┌───────────────────────────────────▼───────────────────────────────────┐
+│                         FASTCLAW SERVER (:18080)                      │
+│                                                                       │
+│  ┌─────────────────────────────────────────────────────────────────┐  │
+│  │  Pre-Middleware: Subdomain Rewrite                              │  │
+│  │  {slug}.fastclaw.ai/path  →  /proxy/{slug}/path                │  │
+│  ├─────────────────────────────────────────────────────────────────┤  │
+│  │  Global Middleware: Logger │ Recover │ CORS                     │  │
+│  └─────────────────────────────────────────────────────────────────┘  │
+│                                                                       │
+│  ┌──────────────────┐  ┌─────────────────┐  ┌─────────────────────┐  │
+│  │   Bot API        │  │   Admin API     │  │   Proxy Layer       │  │
+│  │   /bot/api/v1    │  │   /bot/api/v1   │  │   /proxy/:bot_id/*  │  │
+│  │                  │  │   /admin        │  │                     │  │
+│  │  MW: BearerAuth  │  │  MW: AdminAuth  │  │  ┌───────────────┐ │  │
+│  │  MW: BotOwner    │  │                 │  │  │  HTTP Reverse  │ │  │
+│  │                  │  │  App CRUD       │  │  │  Proxy         │ │  │
+│  │  Bot CRUD        │  │  Bot Upgrade    │  │  ├───────────────┤ │  │
+│  │  Start / Stop    │  │                 │  │  │  WebSocket     │ │  │
+│  │  Restart         │  │                 │  │  │  Proxy         │ │  │
+│  │  Skills Mgmt     │  │                 │  │  ├───────────────┤ │  │
+│  │  IM Channels     │  │                 │  │  │  Auto Device   │ │  │
+│  │  Devices         │  │                 │  │  │  Approval      │ │  │
+│  │  Model Providers │  │                 │  │  └───────────────┘ │  │
+│  │  Agent Defaults  │  │                 │  │                     │  │
+│  └────────┬─────────┘  └────────┬────────┘  └──────────┬──────────┘  │
+└───────────┼─────────────────────┼──────────────────────┼─────────────┘
+            │                     │                      │
+            └──────────┬──────────┘                      │
+                       │                                 │
+┌──────────────────────▼─────────────────────────────────▼──────────────┐
+│                        SERVICE LAYER (service/k8s/)                    │
+│                                                                       │
+│  ┌────────────┐  ┌───────────┐  ┌──────────────┐  ┌───────────────┐  │
+│  │ deployment │  │  service  │  │ config_sync  │  │   channel     │  │
+│  │            │  │           │  │              │  │               │  │
+│  │ Create     │  │ Create    │  │ DB → Pod     │  │ Add / Remove  │  │
+│  │ Delete     │  │ Delete    │  │ Pod → DB     │  │ List          │  │
+│  │ Restart    │  │ GetEndpt  │  │ Section Sync │  │ Pairing       │  │
+│  │ Upgrade    │  │           │  │              │  │               │  │
+│  └────────────┘  └───────────┘  └──────────────┘  └───────────────┘  │
+│  ┌────────────┐  ┌───────────┐  ┌──────────────┐                     │
+│  │  gateway   │  │   exec    │  │   approve    │                     │
+│  │            │  │           │  │              │                     │
+│  │ WS Client  │  │ ExecInPod │  │ Auto-Approve │                     │
+│  │ Protocol   │  │ SPDY      │  │ All Pending  │                     │
+│  │  v3 Auth   │  │ WaitReady │  │              │                     │
+│  └────────────┘  └───────────┘  └──────────────┘                     │
+└───────────┬──────────────────────────────────────────────────────────┘
+            │
+     ┌──────┴──────────────────────────────────────────┐
+     │                                                  │
+┌────▼──────────┐        ┌─────────────────────────────▼───────────────┐
+│  PostgreSQL   │        │      KUBERNETES CLUSTER (ns: openclaw)       │
+│               │        │                                              │
+│  ┌─────────┐  │        │  ┌───────────────────────────────────────┐   │
+│  │  apps   │  │        │  │        Shared PVC (openclaw-data)     │   │
+│  │  table  │  │        │  │  subPath/{botID-1}/  {botID-2}/  ...  │   │
+│  ├─────────┤  │        │  └───────────────────────────────────────┘   │
+│  │  bots   │  │        │                                              │
+│  │  table  │  │        │  ┌─ Bot Pod ──────────────────────────────┐  │
+│  │         │  │        │  │  Deployment: oc-{8chars}               │  │
+│  │  config │◀─┼── sync ┼──│  Service:    oc-{8chars}-svc :18789   │  │
+│  │ (JSONB) │──┼── sync ┼─▶│                                       │  │
+│  │         │  │        │  │  ┌─────────────────────────────────┐   │  │
+│  └─────────┘  │        │  │  │   OpenClaw Container            │   │  │
+│               │        │  │  │   openclaw gateway :18789       │   │  │
+└───────────────┘        │  │  │                                 │   │  │
+                         │  │  │   /home/node/.openclaw/         │   │  │
+                         │  │  │   └── openclaw.json (config)    │   │  │
+                         │  │  │                                 │   │  │
+                         │  │  │   Communication with FastClaw:  │   │  │
+                         │  │  │   ├─ HTTP  (REST API proxy)     │   │  │
+                         │  │  │   ├─ WS    (WebUI/Chat proxy)   │   │  │
+                         │  │  │   ├─ WS    (Gateway API v3)     │   │  │
+                         │  │  │   └─ Exec  (kubectl exec/SPDY)  │   │  │
+                         │  │  └─────────────────────────────────┘   │  │
+                         │  └────────────────────┬───────────────────┘  │
+                         │                       │  (per bot instance)  │
+                         └───────────────────────┼─────────────────────┘
+                                                 │
+                              ┌──────────────────▼──────────────────┐
+                              │       EXTERNAL IM SERVICES          │
+                              │       (via OpenClaw bot pods)       │
+                              │                                     │
+                              │   Telegram  ·  Discord  ·  Slack    │
+                              │   Feishu    ·  Teams    ·  LINE     │
+                              │   WhatsApp  ·  (extensible)         │
+                              └─────────────────────────────────────┘
 ```
+
+**Key design decisions:**
+
+- **Single-binary routing** - FastClaw handles subdomain-to-proxy rewriting internally via pre-middleware; no per-bot Ingress objects needed.
+- **Shared PVC with subPath isolation** - All bots share one PersistentVolumeClaim, each isolated by `subPath: {botID}`. Bot data persists across stop/start cycles.
+- **Bidirectional config sync** - `bots.config` JSONB in PostgreSQL is the source of truth. Config is pushed to pods on writes and pulled back on reads, using section-level merging to avoid unnecessary hot-reloads.
+- **Auto device approval at proxy layer** - When a valid token is in the query string, the proxy intercepts `NOT_PAIRED` errors and auto-approves via Gateway WebSocket API for seamless WebUI access.
 
 ## Prerequisites
 

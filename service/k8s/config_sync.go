@@ -186,6 +186,12 @@ func SyncConfigToPod(ctx context.Context, botID string) error {
 		config.Gateway.Auth.Token = bot.AccessToken
 	}
 
+	// Always disable device auth for control UI (pairing handled by fastclaw proxy)
+	if config.Gateway.ControlUI == nil {
+		config.Gateway.ControlUI = &model.ControlUIConfig{}
+	}
+	config.Gateway.ControlUI.DangerouslyDisableDeviceAuth = true
+
 	// Write to pod
 	return WriteOpenClawConfigToPod(ctx, botID, config)
 }

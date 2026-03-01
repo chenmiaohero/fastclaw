@@ -78,6 +78,13 @@ func UpgradeBot(c echo.Context) error {
 		return util.InternalError(c, "failed to upgrade: "+err.Error())
 	}
 
+	// Sync config to new pod after image upgrade (applies latest gateway settings)
+	go func() {
+		if err := k8s.SyncConfigToPod(context.Background(), bot.ID); err != nil {
+			fmt.Printf("[Upgrade] failed to sync config for bot %s: %v\n", bot.ID, err)
+		}
+	}()
+
 	return util.Success(c, map[string]string{
 		"status":         "upgraded",
 		"image":          image,
@@ -156,6 +163,12 @@ func UpgradeAllBots(c echo.Context) error {
 			} else {
 				upgraded.Add(1)
 				result.Status = "upgraded"
+				// Sync config to new pod after image upgrade
+				go func(botID string) {
+					if err := k8s.SyncConfigToPod(context.Background(), botID); err != nil {
+						fmt.Printf("[Upgrade] failed to sync config for bot %s: %v\n", botID, err)
+					}
+				}(b.ID)
 			}
 			results[idx] = result
 		}(i, bot)

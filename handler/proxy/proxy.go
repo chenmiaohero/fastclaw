@@ -1,13 +1,18 @@
 package proxy
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/fastclaw-ai/fastclaw/model"
 	"github.com/fastclaw-ai/fastclaw/service/k8s"
@@ -27,6 +32,61 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true // Allow all origins for development
 	},
+}
+
+// pairingErrorResponse represents the NOT_PAIRED error from OpenClaw gateway
+type pairingErrorResponse struct {
+	Code    string `json:"code"`
+	Details struct {
+		RequestID string `json:"requestId"`
+	} `json:"details"`
+	Message string `json:"message"`
+}
+
+// isNotPairedResponse checks if a JSON body is a NOT_PAIRED error
+func isNotPairedResponse(body []byte) bool {
+	var resp pairingErrorResponse
+	return json.Unmarshal(body, &resp) == nil && resp.Code == "NOT_PAIRED"
+}
+
+// --- Poller-based auto-approval ---
+// When a request with a valid ?token= arrives (initial page load),
+// we start a short-lived poller that repeatedly checks for pending devices.
+// This handles the race condition where the WebUI JS creates pending device
+// requests after the initial page has loaded.
+// No token caching to avoid multi-tenancy issues — only the authenticated
+// request triggers approval, and only for a limited window.
+
+var (
+	activePollersMu sync.Mutex
+	activePollers   = make(map[string]bool) // botID -> polling in progress
+)
+
+// autoApprovePoller polls for pending devices and approves them over a short period.
+func autoApprovePoller(botID, accessToken string) {
+	// Prevent duplicate pollers for the same bot
+	activePollersMu.Lock()
+	if activePollers[botID] {
+		activePollersMu.Unlock()
+		return
+	}
+	activePollers[botID] = true
+	activePollersMu.Unlock()
+
+	defer func() {
+		activePollersMu.Lock()
+		delete(activePollers, botID)
+		activePollersMu.Unlock()
+	}()
+
+	ctx := context.Background()
+	// Poll every 2 seconds for ~16 seconds to catch newly pending devices
+	for i := 0; i < 8; i++ {
+		time.Sleep(2 * time.Second)
+		if err := k8s.AutoApproveAllPending(ctx, botID, accessToken); err != nil {
+			fmt.Printf("[AutoApprove] Poller error for bot %s: %v\n", botID, err)
+		}
+	}
 }
 
 // ProxyToBot proxies requests to the OpenClaw bot
@@ -52,14 +112,13 @@ func ProxyToBot(c echo.Context) error {
 		return util.InternalError(c, "failed to get bot")
 	}
 
-	// Only auto-approve if the request carries the correct access token
+	// Auto-approval: only when request carries a valid access token.
+	// Start a poller to approve devices that become pending in the next ~16s
+	// (from WebUI JS requests that follow the initial page load).
+	accessToken := ""
 	if token := c.QueryParam("token"); token != "" && token == bot.AccessToken {
-		go func() {
-			ctx := context.Background()
-			if err := k8s.AutoApproveAllPending(ctx, bot.ID, bot.AccessToken); err != nil {
-				fmt.Printf("[Proxy] Auto-approve failed for bot %s: %v\n", bot.ID, err)
-			}
-		}()
+		accessToken = bot.AccessToken
+		go autoApprovePoller(bot.ID, accessToken)
 	}
 
 	if bot.Status != model.BotStatusRunning {
@@ -85,7 +144,7 @@ func ProxyToBot(c echo.Context) error {
 
 	// Check if this is a WebSocket upgrade request
 	if isWebSocketRequest(c.Request()) {
-		return proxyWebSocket(c, targetHost, remainingPath)
+		return proxyWebSocket(c, targetHost, remainingPath, bot.ID, accessToken)
 	}
 
 	// Regular HTTP proxy
@@ -113,6 +172,33 @@ func ProxyToBot(c echo.Context) error {
 		}
 	}
 
+	// Auto-approve NOT_PAIRED HTTP responses so subsequent client retries succeed
+	if accessToken != "" {
+		botID := bot.ID
+		token := accessToken
+		proxy.ModifyResponse = func(resp *http.Response) error {
+			if resp.StatusCode < 400 {
+				return nil
+			}
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil
+			}
+			resp.Body = io.NopCloser(bytes.NewReader(body))
+
+			if isNotPairedResponse(body) {
+				fmt.Printf("[Proxy] NOT_PAIRED detected in HTTP response for bot %s, auto-approving...\n", botID)
+				go func() {
+					ctx := context.Background()
+					if err := k8s.AutoApproveAllPending(ctx, botID, token); err != nil {
+						fmt.Printf("[Proxy] Auto-approve (HTTP) failed for bot %s: %v\n", botID, err)
+					}
+				}()
+			}
+			return nil
+		}
+	}
+
 	proxy.ServeHTTP(c.Response(), c.Request())
 	return nil
 }
@@ -121,23 +207,8 @@ func isWebSocketRequest(r *http.Request) bool {
 	return strings.ToLower(r.Header.Get("Upgrade")) == "websocket"
 }
 
-func proxyWebSocket(c echo.Context, targetHost, path string) error {
-	// Upgrade client connection
-	clientConn, err := upgrader.Upgrade(c.Response(), c.Request(), nil)
-	if err != nil {
-		return err
-	}
-	defer clientConn.Close()
-
-	// Connect to backend WebSocket
-	backendURL := url.URL{
-		Scheme:   "ws",
-		Host:     targetHost,
-		Path:     path,
-		RawQuery: c.QueryString(),
-	}
-
-	// Forward relevant headers to backend
+// buildWSRequestHeaders builds the headers for the backend WebSocket connection
+func buildWSRequestHeaders(c echo.Context, targetHost string) http.Header {
 	requestHeader := http.Header{}
 	// Set Origin to the target host to pass OpenClaw's origin check
 	// OpenClaw doesn't support wildcard "*" in allowedOrigins
@@ -161,8 +232,51 @@ func proxyWebSocket(c echo.Context, targetHost, path string) error {
 	} else {
 		requestHeader.Set("X-Forwarded-For", clientIP)
 	}
+	return requestHeader
+}
 
-	backendConn, _, err := websocket.DefaultDialer.Dial(backendURL.String(), requestHeader)
+func proxyWebSocket(c echo.Context, targetHost, path, botID, accessToken string) error {
+	// Upgrade client connection
+	clientConn, err := upgrader.Upgrade(c.Response(), c.Request(), nil)
+	if err != nil {
+		return err
+	}
+	defer clientConn.Close()
+
+	// Connect to backend WebSocket
+	backendURL := url.URL{
+		Scheme:   "ws",
+		Host:     targetHost,
+		Path:     path,
+		RawQuery: c.QueryString(),
+	}
+
+	requestHeader := buildWSRequestHeaders(c, targetHost)
+
+	// Dial backend with auto-approval retry for NOT_PAIRED errors
+	backendConn, resp, err := websocket.DefaultDialer.Dial(backendURL.String(), requestHeader)
+
+	// Handle NOT_PAIRED during WebSocket handshake (upgrade rejected with HTTP error)
+	if err != nil && accessToken != "" && resp != nil && resp.Body != nil {
+		body, readErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if readErr == nil && isNotPairedResponse(body) {
+			fmt.Printf("[Proxy] NOT_PAIRED detected during WS handshake for bot %s, auto-approving...\n", botID)
+
+			// Approve all pending devices (synchronous - wait for completion before retry)
+			ctx := context.Background()
+			if approveErr := k8s.AutoApproveAllPending(ctx, botID, accessToken); approveErr != nil {
+				fmt.Printf("[Proxy] Auto-approve (WS) failed for bot %s: %v\n", botID, approveErr)
+			}
+
+			// Retry WebSocket connection after approval
+			backendConn, _, err = websocket.DefaultDialer.Dial(backendURL.String(), requestHeader)
+			if err == nil {
+				fmt.Printf("[Proxy] WS retry succeeded for bot %s after auto-approval\n", botID)
+			}
+		}
+	}
+
 	if err != nil {
 		c.Logger().Errorf("WebSocket dial error: %v, url: %s", err, backendURL.String())
 		return err
@@ -188,13 +302,32 @@ func proxyWebSocket(c echo.Context, targetHost, path string) error {
 	}()
 
 	// Backend -> Client
+	// If the WebSocket upgrade succeeded but NOT_PAIRED comes as a message,
+	// detect it on the first message and trigger auto-approval in the background
 	go func() {
+		firstMessage := true
 		for {
 			msgType, msg, err := backendConn.ReadMessage()
 			if err != nil {
 				errCh <- err
 				return
 			}
+
+			// Check first message for NOT_PAIRED (handles the case where
+			// WebSocket upgrade succeeds but pairing is checked at message level)
+			if firstMessage && accessToken != "" {
+				firstMessage = false
+				if isNotPairedResponse(msg) {
+					fmt.Printf("[Proxy] NOT_PAIRED detected in WS message for bot %s, auto-approving...\n", botID)
+					go func() {
+						ctx := context.Background()
+						if err := k8s.AutoApproveAllPending(ctx, botID, accessToken); err != nil {
+							fmt.Printf("[Proxy] Auto-approve (WS msg) failed for bot %s: %v\n", botID, err)
+						}
+					}()
+				}
+			}
+
 			if err := clientConn.WriteMessage(msgType, msg); err != nil {
 				errCh <- err
 				return

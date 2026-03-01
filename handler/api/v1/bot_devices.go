@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/fastclaw-ai/fastclaw/middleware"
@@ -291,16 +290,19 @@ func ApproveDevice(c echo.Context) error {
 
 	ctx := context.Background()
 
-	// Get pod name
-	podName, err := k8s.GetPodName(ctx, bot.ID)
+	// Use Gateway WebSocket API directly (bypasses CLI wss:// security check)
+	endpoint, err := k8s.GetServiceEndpoint(ctx, bot.ID)
 	if err != nil {
-		return util.InternalError(c, "failed to get pod: "+err.Error())
+		return util.InternalError(c, "failed to get service endpoint: "+err.Error())
 	}
 
-	// Execute approve command with token for gateway auth
-	output, err := k8s.ExecInPod(ctx, k8s.GetNamespace(), podName, "openclaw",
-		[]string{"node", "/app/openclaw.mjs", "devices", "approve", requestID, "--token", bot.AccessToken})
+	client, err := k8s.NewGatewayClient(ctx, endpoint, bot.AccessToken)
 	if err != nil {
+		return util.InternalError(c, "failed to connect to gateway: "+err.Error())
+	}
+	defer client.Close()
+
+	if err := client.ApprovePairRequest(ctx, requestID); err != nil {
 		return util.InternalError(c, "failed to approve device: "+err.Error())
 	}
 
@@ -308,7 +310,6 @@ func ApproveDevice(c echo.Context) error {
 		"bot_id":     bot.ID,
 		"request_id": requestID,
 		"message":    "device approved",
-		"output":     strings.TrimSpace(output),
 	})
 }
 
@@ -337,16 +338,19 @@ func RevokeDevice(c echo.Context) error {
 
 	ctx := context.Background()
 
-	// Get pod name
-	podName, err := k8s.GetPodName(ctx, bot.ID)
+	// Use Gateway WebSocket API directly (bypasses CLI wss:// security check)
+	endpoint, err := k8s.GetServiceEndpoint(ctx, bot.ID)
 	if err != nil {
-		return util.InternalError(c, "failed to get pod: "+err.Error())
+		return util.InternalError(c, "failed to get service endpoint: "+err.Error())
 	}
 
-	// Execute revoke command with token for gateway auth
-	output, err := k8s.ExecInPod(ctx, k8s.GetNamespace(), podName, "openclaw",
-		[]string{"node", "/app/openclaw.mjs", "devices", "revoke", "--device", deviceID, "--role", role, "--token", bot.AccessToken})
+	client, err := k8s.NewGatewayClient(ctx, endpoint, bot.AccessToken)
 	if err != nil {
+		return util.InternalError(c, "failed to connect to gateway: "+err.Error())
+	}
+	defer client.Close()
+
+	if err := client.RevokeNode(ctx, deviceID, role); err != nil {
 		return util.InternalError(c, "failed to revoke device: "+err.Error())
 	}
 
@@ -355,6 +359,5 @@ func RevokeDevice(c echo.Context) error {
 		"device_id": deviceID,
 		"role":      role,
 		"message":   "device revoked",
-		"output":    strings.TrimSpace(output),
 	})
 }

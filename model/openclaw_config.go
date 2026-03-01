@@ -185,7 +185,8 @@ type TailscaleConfig struct {
 
 // ControlUIConfig represents control UI configuration
 type ControlUIConfig struct {
-	AllowedOrigins []string `json:"allowedOrigins,omitempty"`
+	AllowedOrigins                []string `json:"allowedOrigins,omitempty"`
+	DangerouslyDisableDeviceAuth  bool     `json:"dangerouslyDisableDeviceAuth,omitempty"`
 }
 
 // AuthConfig represents authentication profiles configuration

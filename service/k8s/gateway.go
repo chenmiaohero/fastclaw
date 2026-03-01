@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -86,28 +87,44 @@ type GatewayClient struct {
 
 // NewGatewayClient creates a new Gateway client and connects to the specified endpoint
 func NewGatewayClient(ctx context.Context, endpoint, accessToken string) (*GatewayClient, error) {
-	// Build WebSocket URL - try with token in URL first
-	wsURL := fmt.Sprintf("ws://%s/?token=%s", endpoint, accessToken)
-
-	// Set up dialer with timeout
-	dialer := websocket.Dialer{
+	// Set up dialer with TLS support for self-signed certs
+	tlsDialer := websocket.Dialer{
+		HandshakeTimeout: 10 * time.Second,
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}
+	plainDialer := websocket.Dialer{
 		HandshakeTimeout: 10 * time.Second,
 	}
 
-	// Build headers with multiple auth methods for compatibility
-	headers := http.Header{
-		"Origin":        []string{fmt.Sprintf("http://%s", endpoint)},
+	// Try wss:// first (OpenClaw v2026.2.19+ requires secure transport for non-loopback),
+	// fall back to ws:// for older versions that don't support TLS
+	wssURL := fmt.Sprintf("wss://%s/?token=%s", endpoint, accessToken)
+	wssHeaders := http.Header{
+		"Origin":        []string{fmt.Sprintf("https://%s", endpoint)},
 		"Authorization": []string{fmt.Sprintf("Bearer %s", accessToken)},
 	}
 
-	// Connect
-	conn, resp, err := dialer.DialContext(ctx, wsURL, headers)
+	conn, _, err := tlsDialer.DialContext(ctx, wssURL, wssHeaders)
 	if err != nil {
-		errMsg := fmt.Sprintf("failed to connect to gateway at %s: %v", wsURL, err)
-		if resp != nil {
-			errMsg += fmt.Sprintf(" (status: %d)", resp.StatusCode)
+		// Fallback to ws:// for older OpenClaw versions without TLS
+		wsURL := fmt.Sprintf("ws://%s/?token=%s", endpoint, accessToken)
+		wsHeaders := http.Header{
+			"Origin":        []string{fmt.Sprintf("http://%s", endpoint)},
+			"Authorization": []string{fmt.Sprintf("Bearer %s", accessToken)},
 		}
-		return nil, fmt.Errorf("%s", errMsg)
+
+		var wsErr error
+		var wsResp *http.Response
+		conn, wsResp, wsErr = plainDialer.DialContext(ctx, wsURL, wsHeaders)
+		if wsErr != nil {
+			errMsg := fmt.Sprintf("failed to connect to gateway at %s (wss err: %v, ws err: %v)", endpoint, err, wsErr)
+			if wsResp != nil {
+				errMsg += fmt.Sprintf(" (status: %d)", wsResp.StatusCode)
+			}
+			return nil, fmt.Errorf("%s", errMsg)
+		}
 	}
 
 	client := &GatewayClient{
@@ -157,15 +174,25 @@ func (c *GatewayClient) handleAuth(ctx context.Context, accessToken string) erro
 		return nil
 	}
 
-	// Send auth response with password token
+	// Send connect request matching OpenClaw's current gateway protocol (v3).
+	// Required fields: minProtocol, maxProtocol, client, role, scopes, auth.
 	authReq := map[string]interface{}{
 		"type":   "req",
-		"id":     0,
+		"id":     1,
 		"method": "connect",
 		"params": map[string]interface{}{
+			"minProtocol": 3,
+			"maxProtocol": 3,
+			"client": map[string]interface{}{
+				"id":       "fastclaw",
+				"version":  "1.0.0",
+				"platform": "linux",
+				"mode":     "operator",
+			},
+			"role":   "operator",
+			"scopes": []string{"operator.read", "operator.write"},
 			"auth": map[string]interface{}{
-				"mode":     "password",
-				"password": accessToken,
+				"token": accessToken,
 			},
 			"nonce": event.Payload.Nonce,
 		},
@@ -339,6 +366,23 @@ func (c *GatewayClient) GetPairedNodes(ctx context.Context) ([]PairedNode, error
 	}
 
 	return resp.Nodes, nil
+}
+
+// ApprovePairRequest approves a pending pairing request by requestId
+func (c *GatewayClient) ApprovePairRequest(ctx context.Context, requestID string) error {
+	_, err := c.Call(ctx, "node.pair.approve", map[string]string{
+		"requestId": requestID,
+	})
+	return err
+}
+
+// RevokeNode revokes a paired device by deviceId and role
+func (c *GatewayClient) RevokeNode(ctx context.Context, deviceID, role string) error {
+	_, err := c.Call(ctx, "node.revoke", map[string]string{
+		"deviceId": deviceID,
+		"role":     role,
+	})
+	return err
 }
 
 // ListBotDevicesViaGateway lists devices using the Gateway WebSocket API

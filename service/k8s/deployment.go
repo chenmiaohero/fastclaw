@@ -371,7 +371,9 @@ func GetDeploymentStatusInfo(ctx context.Context, botID string) (*DeploymentStat
 	}
 
 	// Determine status
-	if deployment.Status.ReadyReplicas == 0 {
+	if *deployment.Spec.Replicas == 0 {
+		info.Status = "stopped"
+	} else if deployment.Status.ReadyReplicas == 0 {
 		info.Status = "starting"
 	} else if deployment.Status.UpdatedReplicas < *deployment.Spec.Replicas {
 		// Rolling update in progress

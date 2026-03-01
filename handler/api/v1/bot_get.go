@@ -8,12 +8,16 @@ import (
 	"github.com/fastclaw-ai/fastclaw/service/k8s"
 	"github.com/fastclaw-ai/fastclaw/util"
 	"github.com/labstack/echo/v4"
+	"github.com/spf13/viper"
 )
 
 // GetBotResponse includes bot info and deployment status
 type GetBotResponse struct {
 	*model.Bot
 	DeploymentStatus *k8s.DeploymentStatusInfo `json:"deployment_status,omitempty"`
+	Image            string                     `json:"image,omitempty"`
+	LatestImage      string                     `json:"latest_image,omitempty"`
+	ImageUpToDate    *bool                      `json:"image_up_to_date,omitempty"`
 }
 
 func GetBot(c echo.Context) error {
@@ -25,11 +29,22 @@ func GetBot(c echo.Context) error {
 	ctx := context.Background()
 	response := &GetBotResponse{Bot: bot}
 
-	// If bot is running, get deployment status and sync config
+	// If bot is running, get deployment status, image info, and sync config
 	if bot.Status == model.BotStatusRunning {
 		// Get deployment status
 		if statusInfo, err := k8s.GetDeploymentStatusInfo(ctx, bot.ID); err == nil {
 			response.DeploymentStatus = statusInfo
+		}
+
+		// Get current and latest image for upgrade check
+		if currentImage, err := k8s.GetDeploymentImage(ctx, bot.ID); err == nil {
+			response.Image = currentImage
+			latestImage := viper.GetString("openclaw.image")
+			if latestImage != "" {
+				response.LatestImage = latestImage
+				upToDate := currentImage == latestImage
+				response.ImageUpToDate = &upToDate
+			}
 		}
 
 		// Only sync config if deployment is ready (not during updates)

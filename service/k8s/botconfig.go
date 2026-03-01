@@ -118,6 +118,9 @@ func mergeConfigForModels(existing map[string]interface{}, config *BotConfig, se
 			"resetOnExit": false,
 		},
 		"trustedProxies": trustedProxies,
+		"controlUi": map[string]interface{}{
+			"dangerouslyDisableDeviceAuth": true,
+		},
 	}
 	existing["gateway"] = gateway
 
@@ -334,9 +337,12 @@ func buildOpenClawConfig(config *BotConfig, setDefaultModel bool) string {
 	if trustedProxies != "" {
 		optionalParts += fmt.Sprintf(",\n    \"trustedProxies\": %s", trustedProxies)
 	}
+	// Build controlUi section with dangerouslyDisableDeviceAuth and optional allowedOrigins
+	controlUiParts := `"dangerouslyDisableDeviceAuth": true`
 	if allowedOrigins != "" {
-		optionalParts += fmt.Sprintf(",\n    \"controlUi\": {\n      \"allowedOrigins\": %s\n    }", allowedOrigins)
+		controlUiParts += fmt.Sprintf(",\n      \"allowedOrigins\": %s", allowedOrigins)
 	}
+	optionalParts += fmt.Sprintf(",\n    \"controlUi\": {\n      %s\n    }", controlUiParts)
 
 	// Build auth section using token auth with AccessToken
 	authSection := fmt.Sprintf(`"auth": {
@@ -552,12 +558,16 @@ func BuildGatewayConfig(config *BotConfig, port int32) string {
 		optionalParts += fmt.Sprintf(`,
     "trustedProxies": %s`, trustedProxies)
 	}
+	// Build controlUi section with dangerouslyDisableDeviceAuth and optional allowedOrigins
+	controlUiParts := `"dangerouslyDisableDeviceAuth": true`
 	if allowedOrigins != "" {
-		optionalParts += fmt.Sprintf(`,
-    "controlUi": {
-      "allowedOrigins": %s
-    }`, allowedOrigins)
+		controlUiParts += fmt.Sprintf(`,
+      "allowedOrigins": %s`, allowedOrigins)
 	}
+	optionalParts += fmt.Sprintf(`,
+    "controlUi": {
+      %s
+    }`, controlUiParts)
 
 	// Build auth section using token auth with AccessToken
 	authSection := fmt.Sprintf(`"auth": {
