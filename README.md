@@ -48,9 +48,11 @@ Each bot runs as an isolated K8s Pod with its own Deployment + Service. FastClaw
 
 ### Option A: Helm Install (recommended)
 
-One command to deploy everything (FastClaw + PostgreSQL + RBAC) into your K8s cluster:
+Build the image locally first, then deploy everything (FastClaw + PostgreSQL + RBAC) into your K8s cluster:
 
 ```bash
+docker build -t fastclaw:latest .
+
 helm install fastclaw deploy/helm/fastclaw \
   -n fastclaw --create-namespace \
   --set adminToken="my-admin-token"
