@@ -16,34 +16,25 @@ Kubernetes-native platform for managing and orchestrating [OpenClaw](https://git
 ## Architecture
 
 ```
-┌──────────┐       ┌──────────────────────────┐       ┌──────────────────────┐
-│  Client  │──────▶│        FastClaw          │──────▶│    K8s Cluster       │
-│          │       │                          │       │                      │
-│ Browser  │       │  ┌─────────┐ ┌────────┐  │       │  ┌────────────────┐  │
-│ CLI      │       │  │ Bot API │ │Admin   │  │       │  │  OpenClaw Pod  │  │
-│ API      │       │  │ (CRUD,  │ │API     │  │  K8s  │  │  ┌──────────┐ │  │
-│          │       │  │ Skills, │ │(Apps,  │  │  API  │  │  │ Gateway  │ │  │
-└──────────┘       │  │ Channel,│ │Upgrade)│  │◀─────▶│  │  │  :18789  │ │  │
-     │             │  │ Devices,│ └────────┘  │       │  │  ├──────────┤ │  │
-     │  Subdomain  │  │ Models) │             │       │  │  │ Channels │ │  │
-     │  Routing    │  └─────────┘ ┌────────┐  │       │  │  │ TG/Slack │ │  │
-     │             │              │ Proxy  │  │ HTTP/ │  │  │ Discord..│ │  │
-     └────────────▶│              │ HTTP & │──┼─WS───▶│  │  └──────────┘ │  │
-  {slug}.domain/*  │              │ WS     │  │       │  └────────────────┘  │
-                   │              └────────┘  │       │  ┌────────────────┐  │
-                   │                     │    │       │  │  Shared PVC    │  │
-                   └─────────────────────┼────┘       │  │  /data/{botID} │  │
-                                         │            │  └────────────────┘  │
-                                   ┌─────┴─────┐      └──────────────────────┘
-                                   │PostgreSQL │
-                                   │ apps      │
-                                   │ bots      │
-                                   │ (config   │
-                                   │  JSONB)   │
-                                   └───────────┘
+┌────────┐       ┌───────────────────────┐       ┌─────────────────────┐
+│ Client │──────▶│       FastClaw        │──────▶│    K8s Cluster      │
+└────────┘       │                       │       │                     │
+    │            │  ┌─────────┐ ┌──────┐ │       │  ┌───────────────┐  │
+    │  Subdomain │  │ Bot API │ │Admin │ │  K8s  │  │ OpenClaw Pod  │  │
+    │  Routing   │  │         │ │ API  │ │  API  │  │               │  │
+    └───────────▶│  └─────────┘ └──────┘ │◀────▶│  │  Gateway      │  │
+                 │  ┌──────────────────┐ │       │  │  IM Channels  │  │
+                 │  │ Proxy (HTTP/WS)  │─┼──────▶│  │  Devices      │  │
+                 │  └──────────────────┘ │       │  └───────────────┘  │
+                 │           │           │       │  ┌───────────────┐  │
+                 └───────────┼───────────┘       │  │  Shared PVC   │  │
+                             │                   │  └───────────────┘  │
+                       ┌─────┴─────┐             └─────────────────────┘
+                       │PostgreSQL │
+                       └───────────┘
 ```
 
-Each bot runs as an isolated K8s Pod (Deployment + ClusterIP Service). FastClaw manages the full lifecycle and proxies all traffic — subdomain requests are rewritten to `/proxy/{slug}/*` internally, no per-bot Ingress needed. Bot config is stored as JSONB in PostgreSQL and synced bidirectionally with the pod's `openclaw.json`.
+Each bot runs as an isolated K8s Pod with its own Deployment + Service. FastClaw manages the full lifecycle and proxies all traffic via subdomain routing, no per-bot Ingress needed. Bot config is synced bidirectionally between PostgreSQL and the pod.
 
 ## Prerequisites
 
