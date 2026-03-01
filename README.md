@@ -1,6 +1,6 @@
 # FastClaw
 
-Kubernetes-native platform for managing and orchestrating [OpenClaw](https://github.com/1panel-dev/openclaw) (Claude Code) bot instances. Provides a RESTful API to create, deploy, and manage AI agent bots in a multi-tenant environment.
+Kubernetes-native platform for managing and orchestrating [OpenClaw](https://openclaw.ai/) bot instances. Provides a RESTful API to create, deploy, and manage AI agent bots in a multi-tenant environment.
 
 ## Features
 
@@ -229,21 +229,21 @@ helm install fastclaw deploy/helm/fastclaw \
 
 Key values (`deploy/helm/fastclaw/values.yaml`):
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `adminToken` | `change-me` | Admin API token |
-| `server.image.repository` | `fastclaw` | FastClaw image |
-| `server.image.tag` | `latest` | Image tag |
-| `server.replicas` | `1` | Number of replicas |
-| `postgresql.enabled` | `true` | Deploy built-in PostgreSQL |
-| `postgresql.auth.password` | `postgres` | DB password |
-| `externalDatabase.host` | `""` | External DB host (when `postgresql.enabled=false`) |
-| `storage.size` | `10Gi` | Shared PVC size for bot data |
-| `openclaw.image` | `1panel/openclaw:latest` | OpenClaw bot image |
-| `openclaw.cpuLimit` | `2000m` | Bot CPU limit |
-| `openclaw.memoryLimit` | `4Gi` | Bot memory limit |
-| `domain.botDomain` | `fastclaw.ai` | Domain for bot subdomains and API (unless `apiDomain` is set separately) |
-| `ingress.enabled` | `false` | Enable ingress |
+| Parameter                  | Default                  | Description                                                              |
+| -------------------------- | ------------------------ | ------------------------------------------------------------------------ |
+| `adminToken`               | `change-me`              | Admin API token                                                          |
+| `server.image.repository`  | `fastclaw`               | FastClaw image                                                           |
+| `server.image.tag`         | `latest`                 | Image tag                                                                |
+| `server.replicas`          | `1`                      | Number of replicas                                                       |
+| `postgresql.enabled`       | `true`                   | Deploy built-in PostgreSQL                                               |
+| `postgresql.auth.password` | `postgres`               | DB password                                                              |
+| `externalDatabase.host`    | `""`                     | External DB host (when `postgresql.enabled=false`)                       |
+| `storage.size`             | `10Gi`                   | Shared PVC size for bot data                                             |
+| `openclaw.image`           | `1panel/openclaw:latest` | OpenClaw bot image                                                       |
+| `openclaw.cpuLimit`        | `2000m`                  | Bot CPU limit                                                            |
+| `openclaw.memoryLimit`     | `4Gi`                    | Bot memory limit                                                         |
+| `domain.botDomain`         | `fastclaw.ai`            | Domain for bot subdomains and API (unless `apiDomain` is set separately) |
+| `ingress.enabled`          | `false`                  | Enable ingress                                                           |
 
 Use an external database:
 
@@ -272,15 +272,15 @@ helm uninstall fastclaw -n fastclaw
 
 All manifests are in `deploy/k8s/`:
 
-| File | Description |
-|------|-------------|
-| `namespace.yaml` | Namespace |
-| `rbac.yaml` | ServiceAccount, Role, RoleBinding |
-| `pvc.yaml` | Shared storage for bot data |
-| `postgres.yaml` | PostgreSQL Deployment + Service |
-| `secrets.yaml.example` | Secret template (copy and edit) |
-| `configmap.yaml` | FastClaw config.toml |
-| `deployment.yaml` | FastClaw Deployment + Service |
+| File                   | Description                       |
+| ---------------------- | --------------------------------- |
+| `namespace.yaml`       | Namespace                         |
+| `rbac.yaml`            | ServiceAccount, Role, RoleBinding |
+| `pvc.yaml`             | Shared storage for bot data       |
+| `postgres.yaml`        | PostgreSQL Deployment + Service   |
+| `secrets.yaml.example` | Secret template (copy and edit)   |
+| `configmap.yaml`       | FastClaw config.toml              |
+| `deployment.yaml`      | FastClaw Deployment + Service     |
 
 ### Docker
 
@@ -335,11 +335,11 @@ GET /health
 
 ### Skills
 
-| Method | Endpoint                            | Description   |
-| ------ | ----------------------------------- | ------------- |
-| GET    | `/bot/api/v1/bots/:id/skills`       | List skills   |
-| PUT    | `/bot/api/v1/bots/:id/skills/:name` | Upsert skill  |
-| DELETE | `/bot/api/v1/bots/:id/skills/:name` | Delete skill  |
+| Method | Endpoint                            | Description  |
+| ------ | ----------------------------------- | ------------ |
+| GET    | `/bot/api/v1/bots/:id/skills`       | List skills  |
+| PUT    | `/bot/api/v1/bots/:id/skills/:name` | Upsert skill |
+| DELETE | `/bot/api/v1/bots/:id/skills/:name` | Delete skill |
 
 ### IM Channels
 
