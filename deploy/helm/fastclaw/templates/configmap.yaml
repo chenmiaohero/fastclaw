@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "fastclaw.fullname" . }}-config
+  labels:
+    {{- include "fastclaw.labels" . | nindent 4 }}
+data:
+  config.toml: |
+    [server]
+    port = {{ .Values.server.port }}
+
+    [db]
+    host = {{ include "fastclaw.dbHost" . | quote }}
+    port = {{ include "fastclaw.dbPort" . }}
+    user = {{ include "fastclaw.dbUser" . | quote }}
+    database = {{ include "fastclaw.dbName" . | quote }}
+    sslmode = {{ include "fastclaw.dbSSLMode" . | quote }}
+    timezone = "Asia/Shanghai"
+
+    [kubernetes]
+    kubeconfig = ""
+    namespace = {{ .Values.kubernetes.namespace | quote }}
+
+    [storage]
+    pvc_name = {{ .Values.storage.pvcName | quote }}
+    base_path = {{ .Values.storage.basePath | quote }}
+
+    [domain]
+    api_domain = {{ .Values.domain.apiDomain | quote }}
+    bot_domain_suffix = {{ .Values.domain.botDomainSuffix | quote }}
+    bot_domain_template = {{ .Values.domain.botDomainTemplate | quote }}
+
+    [openclaw]
+    image = {{ .Values.openclaw.image | quote }}
+    {{- if .Values.openclaw.imagePullSecret }}
+    image_pull_secret = {{ .Values.openclaw.imagePullSecret | quote }}
+    {{- end }}
+    gateway_port = {{ .Values.openclaw.gatewayPort }}
+    cpu_limit = {{ .Values.openclaw.cpuLimit | quote }}
+    memory_limit = {{ .Values.openclaw.memoryLimit | quote }}
+    cpu_request = {{ .Values.openclaw.cpuRequest | quote }}
+    memory_request = {{ .Values.openclaw.memoryRequest | quote }}

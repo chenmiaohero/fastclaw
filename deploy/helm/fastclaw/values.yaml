@@ -1,0 +1,92 @@
+## FastClaw Helm Chart Values
+
+## -- Override the release name
+nameOverride: ""
+fullnameOverride: ""
+
+## FastClaw server
+server:
+  image:
+    repository: fastclaw
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 1
+  port: 18080
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+## Admin API token (required)
+adminToken: "change-me"
+
+## Database
+postgresql:
+  ## -- Set to false to use an external database
+  enabled: true
+  image:
+    repository: postgres
+    tag: 16-alpine
+  auth:
+    database: fastclaw
+    username: postgres
+    password: "postgres"
+  storage:
+    size: 5Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+## External database (used when postgresql.enabled=false)
+externalDatabase:
+  host: ""
+  port: 5432
+  user: "postgres"
+  password: ""
+  database: "fastclaw"
+  sslmode: "disable"
+
+## Kubernetes config for bot management
+kubernetes:
+  namespace: fastclaw
+
+## Shared storage for bot data
+storage:
+  pvcName: fastclaw-shared-data
+  size: 10Gi
+  basePath: /fastclaw-data
+
+## Domain config
+domain:
+  apiDomain: fastclaw.ai
+  botDomainSuffix: fastclaw.ai
+  botDomainTemplate: "https://{bot_id}.fastclaw.ai"
+
+## OpenClaw bot config
+openclaw:
+  image: "1panel/openclaw:latest"
+  imagePullSecret: ""
+  gatewayPort: 18789
+  cpuLimit: "2000m"
+  memoryLimit: "4Gi"
+  cpuRequest: "500m"
+  memoryRequest: "1Gi"
+
+## Ingress
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: fastclaw.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []

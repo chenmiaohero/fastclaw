@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "fastclaw.fullname" . }}
+  labels:
+    {{- include "fastclaw.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.server.replicas }}
+  selector:
+    matchLabels:
+      {{- include "fastclaw.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "fastclaw.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "fastclaw.fullname" . }}
+      containers:
+        - name: fastclaw
+          image: "{{ .Values.server.image.repository }}:{{ .Values.server.image.tag }}"
+          imagePullPolicy: {{ .Values.server.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.server.port }}
+          env:
+            - name: FASTCLAW_API_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "fastclaw.fullname" . }}
+                  key: admin-token
+            - name: FASTCLAW_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "fastclaw.fullname" . }}
+                  key: db-password
+          volumeMounts:
+            - name: config
+              mountPath: /app/config.toml
+              subPath: config.toml
+          resources:
+            {{- toYaml .Values.server.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.server.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.server.port }}
+            initialDelaySeconds: 3
+            periodSeconds: 5
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "fastclaw.fullname" . }}-config
