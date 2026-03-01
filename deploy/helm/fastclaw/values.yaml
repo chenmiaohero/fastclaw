@@ -64,10 +64,10 @@ storage:
   basePath: /fastclaw-data
 
 ## Domain config
+## botDomain is the only required setting. apiDomain defaults to botDomain if not set.
 domain:
-  apiDomain: fastclaw.ai
-  botDomainSuffix: fastclaw.ai
-  botDomainTemplate: "https://{bot_id}.fastclaw.ai"
+  botDomain: fastclaw.ai
+  apiDomain: ""
 
 ## OpenClaw bot config
 openclaw:

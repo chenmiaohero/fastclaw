@@ -55,7 +55,8 @@ docker build -t fastclaw:latest .
 
 helm install fastclaw deploy/helm/fastclaw \
   -n fastclaw --create-namespace \
-  --set adminToken="my-admin-token"
+  --set adminToken="my-admin-token" \
+  --set domain.botDomain="fastclaw.loc"
 ```
 
 Verify:
@@ -182,6 +183,40 @@ curl -X POST http://localhost:18080/bot/api/v1/bots/$BOT_ID/restart -H "Authoriz
 curl -X DELETE http://localhost:18080/bot/api/v1/bots/$BOT_ID -H "Authorization: Bearer $API_TOKEN"
 ```
 
+### Local Subdomain Routing (Caddy)
+
+Bot WebUI is accessed via subdomains (e.g., `my-bot.fastclaw.loc`). For local development, use [Caddy](https://caddyserver.com/) to handle TLS and route all subdomains to FastClaw.
+
+Create a `Caddyfile` in the project root:
+
+```caddyfile
+# API
+fastclaw.loc {
+    tls internal
+    reverse_proxy localhost:18080
+}
+
+# Bot subdomains
+*.fastclaw.loc {
+    tls internal
+    reverse_proxy localhost:18080
+}
+```
+
+Run Caddy:
+
+```bash
+caddy run
+```
+
+Then add DNS entries to `/etc/hosts` (or use a local DNS like dnsmasq):
+
+```
+127.0.0.1  fastclaw.loc
+```
+
+> For wildcard `*.fastclaw.loc`, `/etc/hosts` doesn't support wildcards. Use [dnsmasq](https://thekelleys.org.uk/dnsmasq/doc.html) or set up a local DNS resolver. On macOS with OrbStack, you can also use `*.orb.local` domains directly.
+
 ## Deployment
 
 ### Helm Chart
@@ -207,7 +242,7 @@ Key values (`deploy/helm/fastclaw/values.yaml`):
 | `openclaw.image` | `1panel/openclaw:latest` | OpenClaw bot image |
 | `openclaw.cpuLimit` | `2000m` | Bot CPU limit |
 | `openclaw.memoryLimit` | `4Gi` | Bot memory limit |
-| `domain.botDomainSuffix` | `fastclaw.ai` | Bot subdomain suffix |
+| `domain.botDomain` | `fastclaw.ai` | Domain for bot subdomains and API (unless `apiDomain` is set separately) |
 | `ingress.enabled` | `false` | Enable ingress |
 
 Use an external database:

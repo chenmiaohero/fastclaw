@@ -26,9 +26,9 @@ data:
     base_path = {{ .Values.storage.basePath | quote }}
 
     [domain]
-    api_domain = {{ .Values.domain.apiDomain | quote }}
-    bot_domain_suffix = {{ .Values.domain.botDomainSuffix | quote }}
-    bot_domain_template = {{ .Values.domain.botDomainTemplate | quote }}
+    api_domain = {{ (default .Values.domain.botDomain .Values.domain.apiDomain) | quote }}
+    bot_domain_suffix = {{ .Values.domain.botDomain | quote }}
+    bot_domain_template = {{ printf "https://{bot_id}.%s" .Values.domain.botDomain | quote }}
 
     [openclaw]
     image = {{ .Values.openclaw.image | quote }}
