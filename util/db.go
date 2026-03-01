@@ -16,35 +16,27 @@ var (
 	once sync.Once
 )
 
-type DBConfig struct {
-	Host     string `mapstructure:"host"`
-	Port     int    `mapstructure:"port"`
-	User     string `mapstructure:"user"`
-	Password string `mapstructure:"password"`
-	Database string `mapstructure:"database"`
-	SSLMode  string `mapstructure:"sslmode"`
-	Timezone string `mapstructure:"timezone"`
-}
-
 func InitDB() error {
 	var initErr error
 	once.Do(func() {
-		var conf DBConfig
-		if err := viper.UnmarshalKey("db", &conf); err != nil {
-			initErr = fmt.Errorf("unmarshal db config failed: %w", err)
-			return
-		}
+		host := viper.GetString("db.host")
+		port := viper.GetInt("db.port")
+		user := viper.GetString("db.user")
+		password := viper.GetString("db.password")
+		database := viper.GetString("db.database")
+		sslmode := viper.GetString("db.sslmode")
+		timezone := viper.GetString("db.timezone")
 
-		if conf.SSLMode == "" {
-			conf.SSLMode = "disable"
+		if sslmode == "" {
+			sslmode = "disable"
 		}
-		if conf.Timezone == "" {
-			conf.Timezone = "Asia/Shanghai"
+		if timezone == "" {
+			timezone = "Asia/Shanghai"
 		}
 
 		dsn := fmt.Sprintf(
 			"host=%s user=%s password=%s dbname=%s port=%d sslmode=%s TimeZone=%s",
-			conf.Host, conf.User, conf.Password, conf.Database, conf.Port, conf.SSLMode, conf.Timezone,
+			host, user, password, database, port, sslmode, timezone,
 		)
 
 		var err error
