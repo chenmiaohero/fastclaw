@@ -1,6 +1,6 @@
 package main
 
-import "github.com/fastclaw-ai/fastclaw/cmd"
+import "github.com/clawhost/clawhost/cmd"
 
 func main() {
 	cmd.Execute()

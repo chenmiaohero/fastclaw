@@ -1,4 +1,4 @@
-# FastClaw
+# ClawHost
 
 Kubernetes-native platform for managing and orchestrating [OpenClaw](https://openclaw.ai/) bot instances. Provides a RESTful API to create, deploy, and manage AI agent bots in a multi-tenant environment.
 
@@ -17,7 +17,7 @@ Kubernetes-native platform for managing and orchestrating [OpenClaw](https://ope
 
 ```
 ┌────────┐       ┌───────────────────────┐       ┌─────────────────────┐
-│ Client │──────▶│       FastClaw        │──────▶│    K8s Cluster      │
+│ Client │──────▶│       ClawHost        │──────▶│    K8s Cluster      │
 └────────┘       │                       │       │                     │
     │            │  ┌─────────┐ ┌──────┐ │       │  ┌───────────────┐  │
     │  Subdomain │  │ Bot API │ │Admin │ │  K8s  │  │ OpenClaw Pod  │  │
@@ -34,7 +34,7 @@ Kubernetes-native platform for managing and orchestrating [OpenClaw](https://ope
                        └───────────┘
 ```
 
-Each bot runs as an isolated K8s Pod with its own Deployment + Service. FastClaw manages the full lifecycle and proxies all traffic via subdomain routing, no per-bot Ingress needed. Bot config is synced bidirectionally between PostgreSQL and the pod.
+Each bot runs as an isolated K8s Pod with its own Deployment + Service. ClawHost manages the full lifecycle and proxies all traffic via subdomain routing, no per-bot Ingress needed. Bot config is synced bidirectionally between PostgreSQL and the pod.
 
 ## Prerequisites
 
@@ -42,28 +42,28 @@ Each bot runs as an isolated K8s Pod with its own Deployment + Service. FastClaw
 - Kubernetes cluster (1.28+) - locally via [OrbStack](https://orbstack.dev/) or Docker Desktop
 - `kubectl` and optionally `helm` (v3)
 
-> FastClaw does **not** need to run inside the K8s cluster. It only needs a kubeconfig that can reach the cluster API.
+> ClawHost does **not** need to run inside the K8s cluster. It only needs a kubeconfig that can reach the cluster API.
 
 ## Quick Start
 
 ### Option A: Helm Install (recommended)
 
-Build the image locally first, then deploy everything (FastClaw + PostgreSQL + RBAC) into your K8s cluster:
+Build the image locally first, then deploy everything (ClawHost + PostgreSQL + RBAC) into your K8s cluster:
 
 ```bash
-docker build -t fastclaw:latest .
+docker build -t clawhost:latest .
 
-helm install fastclaw deploy/helm/fastclaw \
-  -n fastclaw --create-namespace \
+helm install clawhost deploy/helm/clawhost \
+  -n clawhost --create-namespace \
   --set adminToken="my-admin-token" \
-  --set domain.botDomain="fastclaw.loc"
+  --set domain.botDomain="clawhost.loc"
 ```
 
 Verify:
 
 ```bash
-kubectl -n fastclaw get pods
-kubectl -n fastclaw port-forward svc/fastclaw 18080:18080
+kubectl -n clawhost get pods
+kubectl -n clawhost port-forward svc/clawhost 18080:18080
 curl http://localhost:18080/health
 ```
 
@@ -82,31 +82,31 @@ cp deploy/k8s/secrets.yaml.example deploy/k8s/secrets.yaml
 # edit deploy/k8s/secrets.yaml with your tokens/passwords
 kubectl apply -f deploy/k8s/secrets.yaml
 
-# Deploy PostgreSQL and FastClaw
+# Deploy PostgreSQL and ClawHost
 kubectl apply -f deploy/k8s/postgres.yaml
 kubectl apply -f deploy/k8s/configmap.yaml
 kubectl apply -f deploy/k8s/deployment.yaml
 
 # Port-forward to access locally
-kubectl -n fastclaw port-forward svc/fastclaw 18080:18080
+kubectl -n clawhost port-forward svc/clawhost 18080:18080
 ```
 
 ### Option C: Local Binary
 
-Run FastClaw on your host, connecting to a K8s cluster via kubeconfig.
+Run ClawHost on your host, connecting to a K8s cluster via kubeconfig.
 
 ```bash
-git clone https://github.com/fastclaw-ai/fastclaw.git
-cd fastclaw
-go build -o fastclaw .
+git clone https://github.com/clawhost/clawhost.git
+cd clawhost
+go build -o clawhost .
 cp config.example.toml config.toml
 ```
 
 Start a PostgreSQL instance:
 
 ```bash
-docker run -d --name fastclaw-pg \
-  -e POSTGRES_DB=fastclaw \
+docker run -d --name clawhost-pg \
+  -e POSTGRES_DB=clawhost \
   -e POSTGRES_USER=postgres \
   -e POSTGRES_PASSWORD=postgres \
   -p 5432:5432 postgres:16
@@ -115,7 +115,7 @@ docker run -d --name fastclaw-pg \
 Prepare K8s namespace and storage:
 
 ```bash
-kubectl create namespace fastclaw
+kubectl create namespace clawhost
 kubectl apply -f deploy/k8s/pvc.yaml
 ```
 
@@ -132,7 +132,7 @@ admin_token = "my-admin-token"
 Run:
 
 ```bash
-./fastclaw server
+./clawhost server
 curl http://localhost:18080/health
 ```
 
@@ -185,19 +185,19 @@ curl -X DELETE http://localhost:18080/bot/api/v1/bots/$BOT_ID -H "Authorization:
 
 ### Local Subdomain Routing (Caddy)
 
-Bot WebUI is accessed via subdomains (e.g., `my-bot.fastclaw.loc`). For local development, use [Caddy](https://caddyserver.com/) to handle TLS and route all subdomains to FastClaw.
+Bot WebUI is accessed via subdomains (e.g., `my-bot.clawhost.loc`). For local development, use [Caddy](https://caddyserver.com/) to handle TLS and route all subdomains to ClawHost.
 
 Create a `Caddyfile` in the project root:
 
 ```caddyfile
 # API
-fastclaw.loc {
+clawhost.loc {
     tls internal
     reverse_proxy localhost:18080
 }
 
 # Bot subdomains
-*.fastclaw.loc {
+*.clawhost.loc {
     tls internal
     reverse_proxy localhost:18080
 }
@@ -212,27 +212,27 @@ caddy run
 Then add DNS entries to `/etc/hosts` (or use a local DNS like dnsmasq):
 
 ```
-127.0.0.1  fastclaw.loc
+127.0.0.1  clawhost.loc
 ```
 
-> For wildcard `*.fastclaw.loc`, `/etc/hosts` doesn't support wildcards. Use [dnsmasq](https://thekelleys.org.uk/dnsmasq/doc.html) or set up a local DNS resolver. On macOS with OrbStack, you can also use `*.orb.local` domains directly.
+> For wildcard `*.clawhost.loc`, `/etc/hosts` doesn't support wildcards. Use [dnsmasq](https://thekelleys.org.uk/dnsmasq/doc.html) or set up a local DNS resolver. On macOS with OrbStack, you can also use `*.orb.local` domains directly.
 
 ## Deployment
 
 ### Helm Chart
 
 ```bash
-helm install fastclaw deploy/helm/fastclaw \
-  -n fastclaw --create-namespace \
+helm install clawhost deploy/helm/clawhost \
+  -n clawhost --create-namespace \
   --set adminToken="my-secret-token"
 ```
 
-Key values (`deploy/helm/fastclaw/values.yaml`):
+Key values (`deploy/helm/clawhost/values.yaml`):
 
 | Parameter                  | Default                  | Description                                                              |
 | -------------------------- | ------------------------ | ------------------------------------------------------------------------ |
 | `adminToken`               | `change-me`              | Admin API token                                                          |
-| `server.image.repository`  | `fastclaw`               | FastClaw image                                                           |
+| `server.image.repository`  | `clawhost`               | ClawHost image                                                           |
 | `server.image.tag`         | `latest`                 | Image tag                                                                |
 | `server.replicas`          | `1`                      | Number of replicas                                                       |
 | `postgresql.enabled`       | `true`                   | Deploy built-in PostgreSQL                                               |
@@ -242,14 +242,14 @@ Key values (`deploy/helm/fastclaw/values.yaml`):
 | `openclaw.image`           | `1panel/openclaw:latest` | OpenClaw bot image                                                       |
 | `openclaw.cpuLimit`        | `2000m`                  | Bot CPU limit                                                            |
 | `openclaw.memoryLimit`     | `4Gi`                    | Bot memory limit                                                         |
-| `domain.botDomain`         | `fastclaw.ai`            | Domain for bot subdomains and API (unless `apiDomain` is set separately) |
+| `domain.botDomain`         | `clawhost.ai`            | Domain for bot subdomains and API (unless `apiDomain` is set separately) |
 | `ingress.enabled`          | `false`                  | Enable ingress                                                           |
 
 Use an external database:
 
 ```bash
-helm install fastclaw deploy/helm/fastclaw \
-  -n fastclaw --create-namespace \
+helm install clawhost deploy/helm/clawhost \
+  -n clawhost --create-namespace \
   --set adminToken="my-token" \
   --set postgresql.enabled=false \
   --set externalDatabase.host="db.example.com" \
@@ -259,13 +259,13 @@ helm install fastclaw deploy/helm/fastclaw \
 Upgrade:
 
 ```bash
-helm upgrade fastclaw deploy/helm/fastclaw -n fastclaw
+helm upgrade clawhost deploy/helm/clawhost -n clawhost
 ```
 
 Uninstall:
 
 ```bash
-helm uninstall fastclaw -n fastclaw
+helm uninstall clawhost -n clawhost
 ```
 
 ### Raw K8s Manifests
@@ -279,14 +279,14 @@ All manifests are in `deploy/k8s/`:
 | `pvc.yaml`             | Shared storage for bot data       |
 | `postgres.yaml`        | PostgreSQL Deployment + Service   |
 | `secrets.yaml.example` | Secret template (copy and edit)   |
-| `configmap.yaml`       | FastClaw config.toml              |
-| `deployment.yaml`      | FastClaw Deployment + Service     |
+| `configmap.yaml`       | ClawHost config.toml              |
+| `deployment.yaml`      | ClawHost Deployment + Service     |
 
 ### Docker
 
 ```bash
-docker build -t fastclaw:latest .
-docker run -p 18080:18080 -v ./config.toml:/app/config.toml fastclaw:latest
+docker build -t clawhost:latest .
+docker run -p 18080:18080 -v ./config.toml:/app/config.toml clawhost:latest
 ```
 
 ## API Reference

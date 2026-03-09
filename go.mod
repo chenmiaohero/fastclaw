@@ -1,4 +1,4 @@
-module github.com/fastclaw-ai/fastclaw
+module github.com/clawhost/clawhost
 
 go 1.24.0
 

@@ -14,9 +14,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/fastclaw-ai/fastclaw/model"
-	"github.com/fastclaw-ai/fastclaw/service/k8s"
-	"github.com/fastclaw-ai/fastclaw/util"
+	"github.com/clawhost/clawhost/model"
+	"github.com/clawhost/clawhost/service/k8s"
+	"github.com/clawhost/clawhost/util"
 	"github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"

@@ -4,17 +4,17 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/fastclaw-ai/fastclaw/model"
-	"github.com/fastclaw-ai/fastclaw/util"
+	"github.com/clawhost/clawhost/model"
+	"github.com/clawhost/clawhost/util"
 	"github.com/spf13/cobra"
 )
 
 var configFile string
 
 var rootCmd = &cobra.Command{
-	Use:   "fastclaw",
-	Short: "fastclaw is an OpenClaw hosting service",
-	Long:  `fastclaw is a multi-tenant OpenClaw hosting service that deploys OpenClaw instances to Kubernetes clusters.`,
+	Use:   "clawhost",
+	Short: "clawhost is an OpenClaw hosting service",
+	Long:  `clawhost is a multi-tenant OpenClaw hosting service that deploys OpenClaw instances to Kubernetes clusters.`,
 }
 
 func Execute() {

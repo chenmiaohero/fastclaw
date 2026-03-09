@@ -1,8 +1,8 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: fastclaw-pg-data
-  namespace: fastclaw
+  name: clawhost-pg-data
+  namespace: clawhost
 spec:
   accessModes:
     - ReadWriteOnce
@@ -13,21 +13,21 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: fastclaw-pg
-  namespace: fastclaw
+  name: clawhost-pg
+  namespace: clawhost
   labels:
-    app: fastclaw-pg
+    app: clawhost-pg
 spec:
   replicas: 1
   strategy:
     type: Recreate
   selector:
     matchLabels:
-      app: fastclaw-pg
+      app: clawhost-pg
   template:
     metadata:
       labels:
-        app: fastclaw-pg
+        app: clawhost-pg
     spec:
       containers:
         - name: postgres
@@ -36,13 +36,13 @@ spec:
             - containerPort: 5432
           env:
             - name: POSTGRES_DB
-              value: fastclaw
+              value: clawhost
             - name: POSTGRES_USER
               value: postgres
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: fastclaw-secrets
+                  name: clawhost-secrets
                   key: db-password
           volumeMounts:
             - name: pg-data
@@ -57,16 +57,16 @@ spec:
       volumes:
         - name: pg-data
           persistentVolumeClaim:
-            claimName: fastclaw-pg-data
+            claimName: clawhost-pg-data
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: fastclaw-pg
-  namespace: fastclaw
+  name: clawhost-pg
+  namespace: clawhost
 spec:
   selector:
-    app: fastclaw-pg
+    app: clawhost-pg
   ports:
     - port: 5432
       targetPort: 5432

@@ -1,8 +1,8 @@
 package v1
 
 import (
-	"github.com/fastclaw-ai/fastclaw/model"
-	"github.com/fastclaw-ai/fastclaw/service/k8s"
+	"github.com/clawhost/clawhost/model"
+	"github.com/clawhost/clawhost/service/k8s"
 )
 
 // convertToK8sConfig converts model.OpenClawConfig to k8s.BotConfig

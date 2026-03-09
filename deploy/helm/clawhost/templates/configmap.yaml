@@ -1,20 +1,20 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "fastclaw.fullname" . }}-config
+  name: {{ include "clawhost.fullname" . }}-config
   labels:
-    {{- include "fastclaw.labels" . | nindent 4 }}
+    {{- include "clawhost.labels" . | nindent 4 }}
 data:
   config.toml: |
     [server]
     port = {{ .Values.server.port }}
 
     [db]
-    host = {{ include "fastclaw.dbHost" . | quote }}
-    port = {{ include "fastclaw.dbPort" . }}
-    user = {{ include "fastclaw.dbUser" . | quote }}
-    database = {{ include "fastclaw.dbName" . | quote }}
-    sslmode = {{ include "fastclaw.dbSSLMode" . | quote }}
+    host = {{ include "clawhost.dbHost" . | quote }}
+    port = {{ include "clawhost.dbPort" . }}
+    user = {{ include "clawhost.dbUser" . | quote }}
+    database = {{ include "clawhost.dbName" . | quote }}
+    sslmode = {{ include "clawhost.dbSSLMode" . | quote }}
     timezone = "Asia/Shanghai"
 
     [kubernetes]

@@ -1,37 +1,37 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: fastclaw
-  namespace: fastclaw
+  name: clawhost
+  namespace: clawhost
   labels:
-    app: fastclaw
+    app: clawhost
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: fastclaw
+      app: clawhost
   template:
     metadata:
       labels:
-        app: fastclaw
+        app: clawhost
     spec:
-      serviceAccountName: fastclaw
+      serviceAccountName: clawhost
       containers:
-        - name: fastclaw
-          image: fastclaw:latest
+        - name: clawhost
+          image: clawhost:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 18080
           env:
-            - name: FASTCLAW_API_ADMIN_TOKEN
+            - name: CLAWHOST_API_ADMIN_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: fastclaw-secrets
+                  name: clawhost-secrets
                   key: admin-token
-            - name: FASTCLAW_DB_PASSWORD
+            - name: CLAWHOST_DB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: fastclaw-secrets
+                  name: clawhost-secrets
                   key: db-password
           volumeMounts:
             - name: config
@@ -59,16 +59,16 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: fastclaw-config
+            name: clawhost-config
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: fastclaw
-  namespace: fastclaw
+  name: clawhost
+  namespace: clawhost
 spec:
   selector:
-    app: fastclaw
+    app: clawhost
   ports:
     - port: 18080
       targetPort: 18080

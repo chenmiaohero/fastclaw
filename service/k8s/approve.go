@@ -7,7 +7,7 @@ import (
 )
 
 // AutoApproveAllPending approves all pending device pairing requests for a bot.
-// Uses the Gateway WebSocket API directly from fastclaw, bypassing the CLI.
+// Uses the Gateway WebSocket API directly from clawhost, bypassing the CLI.
 // This avoids the wss:// security check that OpenClaw 2.19+ enforces on CLI commands.
 func AutoApproveAllPending(ctx context.Context, botID, accessToken string) error {
 	// Get service endpoint

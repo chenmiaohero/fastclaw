@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"time"
 
-	"github.com/fastclaw-ai/fastclaw/util"
+	"github.com/clawhost/clawhost/util"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )

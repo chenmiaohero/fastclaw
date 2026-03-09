@@ -16,8 +16,8 @@ func InitConfig(filename string) error {
 	}
 
 	// Allow environment variables to override config values.
-	// FASTCLAW_DB_PASSWORD -> db.password, FASTCLAW_API_ADMIN_TOKEN -> api.admin_token, etc.
-	viper.SetEnvPrefix("FASTCLAW")
+	// CLAWHOST_DB_PASSWORD -> db.password, CLAWHOST_API_ADMIN_TOKEN -> api.admin_token, etc.
+	viper.SetEnvPrefix("CLAWHOST")
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
 

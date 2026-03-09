@@ -2,9 +2,9 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "fastclaw.fullname" . }}-pg-data
+  name: {{ include "clawhost.fullname" . }}-pg-data
   labels:
-    {{- include "fastclaw.labels" . | nindent 4 }}
+    {{- include "clawhost.labels" . | nindent 4 }}
 spec:
   accessModes:
     - ReadWriteOnce
@@ -15,9 +15,9 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "fastclaw.fullname" . }}-pg
+  name: {{ include "clawhost.fullname" . }}-pg
   labels:
-    {{- include "fastclaw.labels" . | nindent 4 }}
+    {{- include "clawhost.labels" . | nindent 4 }}
     app.kubernetes.io/component: postgresql
 spec:
   replicas: 1
@@ -25,12 +25,12 @@ spec:
     type: Recreate
   selector:
     matchLabels:
-      {{- include "fastclaw.selectorLabels" . | nindent 6 }}
+      {{- include "clawhost.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: postgresql
   template:
     metadata:
       labels:
-        {{- include "fastclaw.selectorLabels" . | nindent 8 }}
+        {{- include "clawhost.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: postgresql
     spec:
       containers:
@@ -46,7 +46,7 @@ spec:
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "fastclaw.fullname" . }}
+                  name: {{ include "clawhost.fullname" . }}
                   key: db-password
           volumeMounts:
             - name: pg-data
@@ -56,18 +56,18 @@ spec:
       volumes:
         - name: pg-data
           persistentVolumeClaim:
-            claimName: {{ include "fastclaw.fullname" . }}-pg-data
+            claimName: {{ include "clawhost.fullname" . }}-pg-data
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "fastclaw.fullname" . }}-pg
+  name: {{ include "clawhost.fullname" . }}-pg
   labels:
-    {{- include "fastclaw.labels" . | nindent 4 }}
+    {{- include "clawhost.labels" . | nindent 4 }}
     app.kubernetes.io/component: postgresql
 spec:
   selector:
-    {{- include "fastclaw.selectorLabels" . | nindent 4 }}
+    {{- include "clawhost.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: postgresql
   ports:
     - port: 5432

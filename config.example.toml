@@ -9,22 +9,22 @@ host = "localhost"
 port = 5432
 user = "postgres"
 password = "your-password"
-database = "fastclaw"
+database = "clawhost"
 sslmode = "disable"
 timezone = "Asia/Shanghai"
 
 [kubernetes]
 kubeconfig = ""  # Empty for in-cluster config
-namespace = "fastclaw"
+namespace = "clawhost"
 
 [storage]
-pvc_name = "fastclaw-shared-data"
-base_path = "/fastclaw-data"
+pvc_name = "clawhost-shared-data"
+base_path = "/clawhost-data"
 
 [domain]
-api_domain = "fastclaw.ai"
-bot_domain_suffix = "fastclaw.ai"
-bot_domain_template = "https://{bot_id}.fastclaw.ai"
+api_domain = "clawhost.ai"
+bot_domain_suffix = "clawhost.ai"
+bot_domain_template = "https://{bot_id}.clawhost.ai"
 
 [openclaw]
 image = "1panel/openclaw:latest"

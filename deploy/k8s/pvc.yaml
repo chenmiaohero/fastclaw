@@ -1,8 +1,8 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: fastclaw-shared-data
-  namespace: fastclaw
+  name: clawhost-shared-data
+  namespace: clawhost
 spec:
   accessModes:
     - ReadWriteOnce

@@ -184,7 +184,7 @@ func (c *GatewayClient) handleAuth(ctx context.Context, accessToken string) erro
 			"minProtocol": 3,
 			"maxProtocol": 3,
 			"client": map[string]interface{}{
-				"id":       "fastclaw",
+				"id":       "clawhost",
 				"version":  "1.0.0",
 				"platform": "linux",
 				"mode":     "operator",

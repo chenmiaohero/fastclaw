@@ -6,10 +6,10 @@ import (
 	"net"
 	"strings"
 
-	v1 "github.com/fastclaw-ai/fastclaw/handler/api/v1"
-	"github.com/fastclaw-ai/fastclaw/handler/proxy"
-	authmw "github.com/fastclaw-ai/fastclaw/middleware"
-	"github.com/fastclaw-ai/fastclaw/service/k8s"
+	v1 "github.com/clawhost/clawhost/handler/api/v1"
+	"github.com/clawhost/clawhost/handler/proxy"
+	authmw "github.com/clawhost/clawhost/middleware"
+	"github.com/clawhost/clawhost/service/k8s"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/spf13/cobra"
@@ -161,7 +161,7 @@ func startServer() {
 		return c.JSON(200, map[string]string{"status": "ok"})
 	})
 
-	// Bot proxy routes (for {bot_id}.fastclaw.ai/*)
+	// Bot proxy routes (for {bot_id}.clawhost.ai/*)
 	e.Any("/proxy/:bot_id", proxy.ProxyToBot)
 	e.Any("/proxy/:bot_id/*", proxy.ProxyToBot)
 

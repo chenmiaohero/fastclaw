@@ -3,7 +3,7 @@ kind: PersistentVolumeClaim
 metadata:
   name: {{ .Values.storage.pvcName }}
   labels:
-    {{- include "fastclaw.labels" . | nindent 4 }}
+    {{- include "clawhost.labels" . | nindent 4 }}
 spec:
   accessModes:
     - ReadWriteOnce

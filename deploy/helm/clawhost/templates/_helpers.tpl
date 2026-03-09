@@ -1,8 +1,8 @@
-{{- define "fastclaw.name" -}}
+{{- define "clawhost.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
-{{- define "fastclaw.fullname" -}}
+{{- define "clawhost.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -15,26 +15,26 @@
 {{- end }}
 {{- end }}
 
-{{- define "fastclaw.labels" -}}
-app.kubernetes.io/name: {{ include "fastclaw.name" . }}
+{{- define "clawhost.labels" -}}
+app.kubernetes.io/name: {{ include "clawhost.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
 
-{{- define "fastclaw.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "fastclaw.name" . }}
+{{- define "clawhost.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "clawhost.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
-{{- define "fastclaw.dbHost" -}}
+{{- define "clawhost.dbHost" -}}
 {{- if .Values.postgresql.enabled }}
-{{- printf "%s-pg" (include "fastclaw.fullname" .) }}
+{{- printf "%s-pg" (include "clawhost.fullname" .) }}
 {{- else }}
 {{- .Values.externalDatabase.host }}
 {{- end }}
 {{- end }}
 
-{{- define "fastclaw.dbPort" -}}
+{{- define "clawhost.dbPort" -}}
 {{- if .Values.postgresql.enabled }}
 {{- 5432 }}
 {{- else }}
@@ -42,7 +42,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 {{- end }}
 
-{{- define "fastclaw.dbUser" -}}
+{{- define "clawhost.dbUser" -}}
 {{- if .Values.postgresql.enabled }}
 {{- .Values.postgresql.auth.username }}
 {{- else }}
@@ -50,7 +50,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 {{- end }}
 
-{{- define "fastclaw.dbPassword" -}}
+{{- define "clawhost.dbPassword" -}}
 {{- if .Values.postgresql.enabled }}
 {{- .Values.postgresql.auth.password }}
 {{- else }}
@@ -58,7 +58,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 {{- end }}
 
-{{- define "fastclaw.dbName" -}}
+{{- define "clawhost.dbName" -}}
 {{- if .Values.postgresql.enabled }}
 {{- .Values.postgresql.auth.database }}
 {{- else }}
@@ -66,7 +66,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 {{- end }}
 
-{{- define "fastclaw.dbSSLMode" -}}
+{{- define "clawhost.dbSSLMode" -}}
 {{- if .Values.postgresql.enabled }}
 {{- "disable" }}
 {{- else }}

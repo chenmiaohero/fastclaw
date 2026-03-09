@@ -3,11 +3,11 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o fastclaw .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o clawhost .
 
 FROM alpine:latest
 RUN apk --no-cache add ca-certificates tzdata
 WORKDIR /app
-COPY --from=builder /app/fastclaw .
+COPY --from=builder /app/clawhost .
 EXPOSE 18080
-CMD ["./fastclaw", "server"]
+CMD ["./clawhost", "server"]

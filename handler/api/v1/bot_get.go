@@ -3,10 +3,10 @@ package v1
 import (
 	"context"
 
-	"github.com/fastclaw-ai/fastclaw/middleware"
-	"github.com/fastclaw-ai/fastclaw/model"
-	"github.com/fastclaw-ai/fastclaw/service/k8s"
-	"github.com/fastclaw-ai/fastclaw/util"
+	"github.com/clawhost/clawhost/middleware"
+	"github.com/clawhost/clawhost/model"
+	"github.com/clawhost/clawhost/service/k8s"
+	"github.com/clawhost/clawhost/util"
 	"github.com/labstack/echo/v4"
 	"github.com/spf13/viper"
 )

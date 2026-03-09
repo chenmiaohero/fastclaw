@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/fastclaw-ai/fastclaw/model"
+	"github.com/clawhost/clawhost/model"
 )
 
 // ReadOpenClawConfig reads the openclaw.json config from the pod
@@ -186,7 +186,7 @@ func SyncConfigToPod(ctx context.Context, botID string) error {
 		config.Gateway.Auth.Token = bot.AccessToken
 	}
 
-	// Always disable device auth for control UI (pairing handled by fastclaw proxy)
+	// Always disable device auth for control UI (pairing handled by clawhost proxy)
 	if config.Gateway.ControlUI == nil {
 		config.Gateway.ControlUI = &model.ControlUIConfig{}
 	}

@@ -1,42 +1,42 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "fastclaw.fullname" . }}
+  name: {{ include "clawhost.fullname" . }}
   labels:
-    {{- include "fastclaw.labels" . | nindent 4 }}
+    {{- include "clawhost.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.server.replicas }}
   selector:
     matchLabels:
-      {{- include "fastclaw.selectorLabels" . | nindent 6 }}
+      {{- include "clawhost.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "fastclaw.selectorLabels" . | nindent 8 }}
+        {{- include "clawhost.selectorLabels" . | nindent 8 }}
     spec:
-      serviceAccountName: {{ include "fastclaw.fullname" . }}
+      serviceAccountName: {{ include "clawhost.fullname" . }}
       {{- if .Values.postgresql.enabled }}
       initContainers:
         - name: wait-for-pg
           image: busybox:1.36
-          command: ['sh', '-c', 'until nc -z {{ include "fastclaw.fullname" . }}-pg 5432; do echo "waiting for postgres..."; sleep 2; done']
+          command: ['sh', '-c', 'until nc -z {{ include "clawhost.fullname" . }}-pg 5432; do echo "waiting for postgres..."; sleep 2; done']
       {{- end }}
       containers:
-        - name: fastclaw
+        - name: clawhost
           image: "{{ .Values.server.image.repository }}:{{ .Values.server.image.tag }}"
           imagePullPolicy: {{ .Values.server.image.pullPolicy }}
           ports:
             - containerPort: {{ .Values.server.port }}
           env:
-            - name: FASTCLAW_API_ADMIN_TOKEN
+            - name: CLAWHOST_API_ADMIN_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "fastclaw.fullname" . }}
+                  name: {{ include "clawhost.fullname" . }}
                   key: admin-token
-            - name: FASTCLAW_DB_PASSWORD
+            - name: CLAWHOST_DB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "fastclaw.fullname" . }}
+                  name: {{ include "clawhost.fullname" . }}
                   key: db-password
           volumeMounts:
             - name: config
@@ -59,4 +59,4 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: {{ include "fastclaw.fullname" . }}-config
+            name: {{ include "clawhost.fullname" . }}-config

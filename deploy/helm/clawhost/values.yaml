@@ -1,13 +1,13 @@
-## FastClaw Helm Chart Values
+## ClawHost Helm Chart Values
 
 ## -- Override the release name
 nameOverride: ""
 fullnameOverride: ""
 
-## FastClaw server
+## ClawHost server
 server:
   image:
-    repository: fastclaw
+    repository: clawhost
     tag: latest
     pullPolicy: IfNotPresent
   replicas: 1
@@ -31,7 +31,7 @@ postgresql:
     repository: postgres
     tag: 16-alpine
   auth:
-    database: fastclaw
+    database: clawhost
     username: postgres
     password: "postgres"
   storage:
@@ -50,23 +50,23 @@ externalDatabase:
   port: 5432
   user: "postgres"
   password: ""
-  database: "fastclaw"
+  database: "clawhost"
   sslmode: "disable"
 
 ## Kubernetes config for bot management
 kubernetes:
-  namespace: fastclaw
+  namespace: clawhost
 
 ## Shared storage for bot data
 storage:
-  pvcName: fastclaw-shared-data
+  pvcName: clawhost-shared-data
   size: 10Gi
-  basePath: /fastclaw-data
+  basePath: /clawhost-data
 
 ## Domain config
 ## botDomain is the only required setting. apiDomain defaults to botDomain if not set.
 domain:
-  botDomain: fastclaw.ai
+  botDomain: clawhost.ai
   apiDomain: ""
 
 ## OpenClaw bot config
@@ -85,7 +85,7 @@ ingress:
   className: ""
   annotations: {}
   hosts:
-    - host: fastclaw.local
+    - host: clawhost.local
       paths:
         - path: /
           pathType: Prefix

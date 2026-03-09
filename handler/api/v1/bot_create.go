@@ -5,9 +5,9 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/fastclaw-ai/fastclaw/middleware"
-	"github.com/fastclaw-ai/fastclaw/model"
-	"github.com/fastclaw-ai/fastclaw/util"
+	"github.com/clawhost/clawhost/middleware"
+	"github.com/clawhost/clawhost/model"
+	"github.com/clawhost/clawhost/util"
 	"github.com/labstack/echo/v4"
 	"github.com/spf13/viper"
 )
@@ -94,7 +94,7 @@ func isValidSlug(slug string) bool {
 func buildAccessURL(slug, token string) string {
 	domain := viper.GetString("domain.bot_domain_suffix")
 	if domain == "" {
-		domain = "fastclaw.ai"
+		domain = "clawhost.ai"
 	}
 	url := fmt.Sprintf("https://%s.%s", slug, domain)
 	if token != "" {

@@ -1,8 +1,8 @@
 package v1
 
 import (
-	"github.com/fastclaw-ai/fastclaw/model"
-	"github.com/fastclaw-ai/fastclaw/util"
+	"github.com/clawhost/clawhost/model"
+	"github.com/clawhost/clawhost/util"
 	"github.com/labstack/echo/v4"
 )
 
